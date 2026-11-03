@@ -1,0 +1,43 @@
+# ===================================================================
+# Docker Compose para PT8080-ApiGateway-Service (API Gateway Perimetral)
+# Squad Portal8080 · DOSW 2026
+#
+# Ejecucion con un solo comando:
+#   docker compose up -d --build
+# ===================================================================
+
+services:
+  # 1. API Gateway Spring Cloud (Puerto 8080)
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sr-api-gateway
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    environment:
+      SERVER_PORT: 8080
+      SPRING_PROFILES_ACTIVE: dev
+      TRYON_SERVICE_URL: ${TRYON_SERVICE_URL:-http://sr-probador-virtual:8092}
+      AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://ms-auth:8081}
+      CATALOGO_SERVICE_URL: ${CATALOGO_SERVICE_URL:-http://ms-catalogo:8084}
+      TIENDAS_SERVICE_URL: ${TIENDAS_SERVICE_URL:-http://ms-tiendas:8082}
+      NOTIFICACIONES_SERVICE_URL: ${NOTIFICACIONES_SERVICE_URL:-http://ms-notificaciones:8091}
+      PAGOS_SERVICE_URL: ${PAGOS_SERVICE_URL:-http://ms-pagos:8090}
+      DONACIONES_SERVICE_URL: ${DONACIONES_SERVICE_URL:-http://ms-donaciones:8093}
+      JWT_SECRET: ${JWT_SECRET:-c3R5bGVyYWRhci1qd3Qtc2VjcmV0LWtleS0yMDI2LXBvcnRhbDgwODAtc3VwZXItc2VjdXJlCg==}
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+    networks:
+      - styleradar-network
+
+networks:
+  styleradar-network:
+    name: styleradar-network
+    driver: bridge
+

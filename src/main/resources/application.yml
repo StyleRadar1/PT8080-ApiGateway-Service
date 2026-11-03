@@ -1,0 +1,108 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: pt8080-apigateway-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "https://*.styleradar.co"
+              - "https://*.azurewebsites.net"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+            maxAge: 3600
+      routes:
+        # 1. Microservicio de Probador Virtual (Paquete 5 · Squad Portal8080)
+        - id: ms-probador-virtual
+          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:http://localhost:8092}}
+          predicates:
+            - Path=/api/v1/probador/**, /v3/api-docs/probador
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: tryonCircuitBreaker
+                fallbackUri: forward:/fallback/probador
+
+        # 2. Microservicio de Autenticación (ms-auth · Puerto 8081)
+        - id: ms-auth
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+
+        # 3. Microservicio de Catálogo de Prendas (ms-catalogo · Puerto 8084)
+        - id: ms-catalogo
+          uri: ${CATALOGO_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/v1/catalogo/**
+
+        # 4. Microservicio de Donaciones (ms-donaciones · Puerto 8093)
+        - id: ms-donaciones
+          uri: ${DONACIONES_SERVICE_URL:http://localhost:8093}
+          predicates:
+            - Path=/api/v1/donaciones/**
+
+        # 5. Microservicio de Tiendas (ms-tiendas · Puerto 8082)
+        - id: ms-tiendas
+          uri: ${TIENDAS_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/tiendas/**
+
+        # 6. Microservicio de Pagos (ms-pagos · Puerto 8090)
+        - id: ms-pagos
+          uri: ${PAGOS_SERVICE_URL:http://localhost:8090}
+          predicates:
+            - Path=/api/v1/pagos/**
+
+        # 7. Microservicio de Notificaciones (ms-notificaciones · Puerto 8091)
+        - id: ms-notificaciones
+          uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8091}
+          predicates:
+            - Path=/api/v1/notificaciones/**
+
+# Configuración de Actuator & Métricas
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, gateway
+  endpoint:
+    health:
+      show-details: always
+
+# Documentación OpenAPI Agregada
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    urls:
+      - name: "ms-probador-virtual (:8092)"
+        url: "/v3/api-docs/probador"
+      - name: "API Gateway (:8080)"
+        url: "/v3/api-docs"
+
+# Seguridad JWT Perimetral
+security:
+  jwt:
+    secret: ${JWT_SECRET:c3R5bGVyYWRhci1qd3Qtc2VjcmV0LWtleS0yMDI2LXBvcnRhbDgwODAtc3VwZXItc2VjdXJlCg==}
+
