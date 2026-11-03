@@ -1,0 +1,11 @@
+# Perfil de Desarrollo Local (DEV) - API Gateway StyleRadar
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty: INFO
+    edu.dosw.styleradar.gateway: DEBUG
+
