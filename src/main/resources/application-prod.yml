@@ -14,7 +14,7 @@ spring:
       routes:
         # Swagger OpenAPI Aggregator en PROD
         - id: ms-probador-virtual-swagger
-          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-backend-prod.azurewebsites.net}}
+          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-virtualtryon-prod.azurewebsites.net}}
           predicates:
             - Path=/v3/api-docs/probador
           filters:
@@ -68,6 +68,16 @@ spring:
           predicates:
             - Path=/api/v1/catalogo/**, /api/v1/prendas/**
 
+        - id: ms-geolocalizacion
+          uri: ${GEOLOCALIZACION_SERVICE_URL:https://styleradar-backend-prod.azurewebsites.net}
+          predicates:
+            - Path=/api/v1/geolocalizacion/**
+
+        - id: ms-playlist
+          uri: ${PLAYLIST_SERVICE_URL:https://styleradar-backend-prod.azurewebsites.net}
+          predicates:
+            - Path=/api/v1/playlist/**
+
         # Paquete 3: Mensajería
         - id: ms-notificaciones
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-backend-prod.azurewebsites.net}
@@ -92,7 +102,7 @@ spring:
 
         # Paquete 5: Experiencia y Donaciones
         - id: ms-probador-virtual
-          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-backend-prod.azurewebsites.net}}
+          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-virtualtryon-prod.azurewebsites.net}}
           predicates:
             - Path=/api/v1/try-on/**, /api/v1/probador/**
           filters:

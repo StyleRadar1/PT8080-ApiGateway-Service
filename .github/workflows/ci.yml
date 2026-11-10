@@ -36,11 +36,10 @@ jobs:
       - name: Compile, Test & Verify JaCoCo Quality Gate (>= 85%)
         run: ./mvnw clean verify -B
 
-      - name: Run SonarQube / SonarCloud Quality Gate Analysis
-        if: env.SONAR_TOKEN != ''
+      - name: Run SonarQube / SonarCloud Quality Gate Analysis (Gate A Obligatorio)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || secrets.SONARCLOUD_TOKEN }}
         run: ./mvnw -B sonar:sonar -Dsonar.qualitygate.wait=true
 
       - name: Upload JaCoCo HTML Coverage Report

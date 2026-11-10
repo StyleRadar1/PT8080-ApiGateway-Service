@@ -208,11 +208,32 @@ sequenceDiagram
 | `ms-chat` | P3: Mensajería | `8320` | `/api/v1/conversaciones/**`, `/api/v1/chat/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
 | `ms-pagos-suscripciones` | P4: Pagos | `8400` | `/api/v1/pagos/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
 | `ms-estadisticas` | P4: Pagos | `8420` | `/api/v1/estadisticas/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-probador-virtual` | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | Sí (`/fallback/probador`) | `styleradar-backend-qa` | `styleradar-backend-prod` |
+| `ms-probador-virtual` | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | Sí (`/fallback/probador`) | `styleradar-virtualtryon-qa` | `styleradar-virtualtryon-prod` |
 | `ms-segunda-vida-donaciones` | P5: Experiencia | `8520` | `/api/v1/donaciones/**`, `/api/v1/segunda-mano/**` | Sí (`/fallback/general`) | `styleradar-donaciones-qa-jmunar` | `styleradar-donaciones-prod-jmunar` |
 | `ms-probador-swagger` | Documentación | `8500` | `/v3/api-docs/probador` $\to$ `/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
 | `ms-donaciones-swagger` | Documentación | `8520` | `/v3/api-docs/donaciones` $\to$ `/api/v1/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
 | `api-gateway` | Perímetro | `8080` | `/actuator/**`, `/v3/api-docs`, `/swagger-ui.html` | N/A | `styleradar-gateway-qa` | `styleradar-gateway-prod` |
+
+### Tabla Oficial de Despliegue y Bases de Datos por Ambiente (Rúbrica Sprint 2)
+
+> **Regla de Oro de la Cátedra:** QA y PROD nunca comparten base de datos. El API Gateway es un componente puramente stateless y reactivo sobre Netty, por lo que opera sin base de datos propia.
+
+| Servicio | URL QA | URL PROD | BD QA | BD PROD |
+| :--- | :--- | :--- | :---: | :---: |
+| `api-gateway` | `https://styleradar-gateway-qa.azurewebsites.net` | `https://styleradar-gateway-prod.azurewebsites.net` | N/A (Stateless) | N/A (Stateless) |
+| `ms-probador-virtual` | `https://styleradar-virtualtryon-qa.azurewebsites.net` | `https://styleradar-virtualtryon-prod.azurewebsites.net` | `probador_db_qa` | `probador_db_prod` |
+| `ms-segunda-vida-donaciones` | `https://styleradar-donaciones-qa-jmunar.azurewebsites.net` | `https://styleradar-donaciones-prod-jmunar.azurewebsites.net` | `donaciones_db_qa` | `donaciones_db_prod` |
+| `ms-auth` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `auth_db_qa` | `auth_db_prod` |
+| `ms-usuarios` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `usuarios_db_qa` | `usuarios_db_prod` |
+| `ms-tiendas` | `https://styleradar-tiendas-qa.azurewebsites.net` | `https://styleradar-tiendas-prod.azurewebsites.net` | `tiendas_db_qa` | `tiendas_db_prod` |
+| `ms-inventario` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `inventario_db_qa` | `inventario_db_prod` |
+| `ms-item-catalogo` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `catalogo_db_qa` | `catalogo_db_prod` |
+| `ms-geolocalizacion` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `geolocalizacion_db_qa` | `geolocalizacion_db_prod` |
+| `ms-playlist` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `playlist_db_qa` | `playlist_db_prod` |
+| `ms-notificaciones` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `notificaciones_db_qa` | `notificaciones_db_prod` |
+| `ms-chat` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `chat_db_qa` | `chat_db_prod` |
+| `ms-pagos-suscripciones` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `pagos_db_qa` | `pagos_db_prod` |
+| `ms-estadisticas` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `estadisticas_db_qa` | `estadisticas_db_prod` |
 
 ### Evidencia de Swagger OpenAPI UI Activa
 
@@ -393,23 +414,26 @@ El ciclo de vida del API Gateway implementa integración continua automatizada m
 | :--- | :---: | :---: | :--- | :---: |
 | **CI - Develop** | `develop`<br>*(Staging)* | Push / PR | Compilación + Pruebas + JaCoCo ≥ 85% + Docker Build | [![CI Develop](https://img.shields.io/badge/develop-passing-16A34A?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
 | **CI - Main** | `main`<br>*(Producción)* | Push / PR | Compilación + Pruebas + JaCoCo ≥ 85% + Docker Build | [![CI Main](https://img.shields.io/badge/main-passing-16A34A?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
-| **SonarQube Gate** | `main`, `develop`<br>*(Estático)* | Push / PR | 0 Bugs + 0 Vulnerabilidades + JaCoCo ≥ 85% | [![SonarQube](https://img.shields.io/badge/SonarQube-passed-16A34A?style=flat-square&logo=sonarqube&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service) |
+| **CD - QA Azure** | `develop`<br>*(Cloud QA)* | Push a `develop` | Build + Pruebas + JaCoCo + SonarCloud + Docker + Azure Deploy + Smoke Test | [![CD QA](https://img.shields.io/badge/azure_qa-passing-5600EF?style=flat-square&logo=azure-app-services&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
+| **CD - PROD Azure** | `main`<br>*(Cloud PROD)* | Push a `main` / Tag `v*` | Build + Pruebas + JaCoCo + SonarCloud + Docker + Azure Deploy + Smoke Test | [![CD PROD](https://img.shields.io/badge/azure_prod-passing-16A34A?style=flat-square&logo=azure-app-services&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
+| **SonarCloud Gate** | `main`, `develop`<br>*(Estático)* | Push / PR | Gate A (0 Bugs + 0 Vulnerabilidades + JaCoCo ≥ 85%) | [![SonarCloud](https://img.shields.io/badge/SonarCloud-passed-16A34A?style=flat-square&logo=sonarcloud&logoColor=white)](https://sonarcloud.io/project/overview?id=StyleRadar1_PT8080-ApiGateway-Service) |
 
 ### Diagrama del Flujo Automatizado (Pipeline Stages)
 
 ```mermaid
 flowchart LR
-    A["Push / PR<br>(main / develop)"] --> B["Setup JDK 21<br>(Temurin & Maven Cache)"]
+    A["Push / PR<br>(main / develop)"] --> B["Setup JDK 21<br>(Temurin & Cache)"]
     B --> C["Build & Tests<br>(mvn clean verify)"]
-    C --> D["Verificación JaCoCo<br>(Coverage ≥ 85%)"]
-    D --> E["Publicar Reporte HTML<br>(Artifact Upload)"]
-    D --> F["Docker Build Check<br>(Multi-stage Image)"]
+    C --> D["JaCoCo Verify<br>(Coverage ≥ 85%)"]
+    D --> E["SonarCloud Gate A<br>(Obligatorio)"]
+    E --> F["Docker Build & Push<br>(Tags SHA & Latest)"]
+    F --> G["Azure Deploy & Smoke Test<br>(Commit SHA Verify)"]
 
     classDef step fill:#12063A,stroke:#5600EF,stroke-width:2px,color:#FFFFFF;
     classDef pass fill:#DCFCE7,stroke:#16A34A,stroke-width:2px,color:#0C0C12;
 
-    class A,B,E,F step;
-    class C,D pass;
+    class A,B step;
+    class C,D,E,F,G pass;
 ```
 
 ---

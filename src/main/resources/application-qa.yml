@@ -14,7 +14,7 @@ spring:
       routes:
         # Swagger OpenAPI Aggregator en QA
         - id: ms-probador-virtual-swagger
-          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-backend-qa.azurewebsites.net}}
+          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-virtualtryon-qa.azurewebsites.net}}
           predicates:
             - Path=/v3/api-docs/probador
           filters:
@@ -102,7 +102,7 @@ spring:
 
         # Paquete 5: Experiencia y Donaciones
         - id: ms-probador-virtual
-          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-backend-qa.azurewebsites.net}}
+          uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-virtualtryon-qa.azurewebsites.net}}
           predicates:
             - Path=/api/v1/try-on/**, /api/v1/probador/**
           filters:

@@ -32,11 +32,10 @@ jobs:
       - name: Ejecutar pruebas y verificar cobertura JaCoCo (>= 85%)
         run: ./mvnw -B clean verify
 
-      - name: Ejecutar análisis SonarQube / SonarCloud
-        if: env.SONAR_TOKEN != ''
+      - name: Ejecutar análisis SonarQube / SonarCloud (Gate A Obligatorio)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || secrets.SONARCLOUD_TOKEN }}
         run: ./mvnw -B sonar:sonar -Dsonar.qualitygate.wait=true
 
       - name: Publicar reporte de cobertura JaCoCo
@@ -92,21 +91,23 @@ jobs:
         with:
           inlineScript: |
             RG=$(az webapp list --query "[?name=='${{ env.AZURE_WEBAPP_NAME }}'].resourceGroup | [0]" -o tsv)
-            if [ -n "$RG" ] && [ "$RG" != "null" ]; then
-              az webapp config appsettings set \
-                --name "${{ env.AZURE_WEBAPP_NAME }}" \
-                --resource-group "$RG" \
-                --output none \
-                --settings \
-                  WEBSITES_PORT=8080 \
-                  SERVER_PORT=8080 \
-                  SPRING_PROFILES_ACTIVE=qa \
-                  JWT_SECRET_BASE64="${{ secrets.JWT_SECRET_QA || secrets.JWT_SECRET_BASE64 }}" \
-                  TRYON_SERVICE_URL="https://styleradar-backend-qa.azurewebsites.net" \
-                  DONACIONES_SERVICE_URL="https://styleradar-donaciones-qa-jmunar.azurewebsites.net" \
-                  AUTH_SERVICE_URL="https://styleradar-backend-qa.azurewebsites.net" \
-                  TIENDAS_SERVICE_URL="https://styleradar-tiendas-qa.azurewebsites.net"
+            if [ -z "$RG" ] || [ "$RG" = "null" ]; then
+              echo "Error: No se encontró el grupo de recursos para el App Service ${{ env.AZURE_WEBAPP_NAME }} en Azure."
+              exit 1
             fi
+            az webapp config appsettings set \
+              --name "${{ env.AZURE_WEBAPP_NAME }}" \
+              --resource-group "$RG" \
+              --output none \
+              --settings \
+                WEBSITES_PORT=8080 \
+                SERVER_PORT=8080 \
+                SPRING_PROFILES_ACTIVE=qa \
+                JWT_SECRET_BASE64="${{ secrets.JWT_SECRET_QA || secrets.JWT_SECRET_BASE64 }}" \
+                TRYON_SERVICE_URL="https://styleradar-virtualtryon-qa.azurewebsites.net" \
+                DONACIONES_SERVICE_URL="https://styleradar-donaciones-qa-jmunar.azurewebsites.net" \
+                AUTH_SERVICE_URL="https://styleradar-backend-qa.azurewebsites.net" \
+                TIENDAS_SERVICE_URL="https://styleradar-tiendas-qa.azurewebsites.net"
 
       - uses: azure/webapps-deploy@v3
         with:
@@ -129,4 +130,5 @@ jobs:
             fi
             sleep 15
           done
-          echo "Smoke Test finalizado."
+          echo "Error en Smoke Test: El Gateway no respondió con HTTP 200 y el commit esperado ($EXPECTED_SHA) tras agotar los 30 intentos."
+          exit 1

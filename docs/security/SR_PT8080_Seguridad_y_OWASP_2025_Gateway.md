@@ -62,7 +62,7 @@ El API Gateway es la **única puerta de entrada pública** hacia la malla de mic
 | **ms-chat** | P3: Mensajería | `8320` | `/api/v1/conversaciones/**`, `/api/v1/chat/**` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` |
 | **ms-pagos** | P4: Pagos | `8400` | `/api/v1/pagos/**` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` |
 | **ms-estadisticas** | P4: Pagos | `8420` | `/api/v1/estadisticas/**` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` |
-| **ms-probador-virtual** | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` |
+| **ms-probador-virtual** | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | `https://styleradar-virtualtryon-qa.azurewebsites.net` | `https://styleradar-virtualtryon-prod.azurewebsites.net` |
 | **ms-donaciones** | P5: Experiencia | `8520` | `/api/v1/donaciones/**`, `/api/v1/segunda-mano/**` | `https://styleradar-donaciones-qa-jmunar.azurewebsites.net` | `https://styleradar-donaciones-prod-jmunar.azurewebsites.net` |
 | **api-gateway** | P5: Perímetro | `8080` | `/actuator/**`, `/v3/api-docs/**`, `/swagger-ui/**` | `https://styleradar-gateway-qa.azurewebsites.net` | `https://styleradar-gateway-prod.azurewebsites.net` |
 
