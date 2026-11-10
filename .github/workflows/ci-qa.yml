@@ -7,6 +7,7 @@ on:
 
 env:
   IMAGE_NAME: pt8080-apigateway-service
+  AZURE_WEBAPP_NAME: styleradar-gateway-qa
 
 jobs:
   test-and-sonar:
@@ -80,27 +81,20 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: qa
-      url: https://${{ secrets.AZURE_WEBAPP_GATEWAY_QA || 'styleradar-gateway-qa' }}.azurewebsites.net/swagger-ui.html
+      url: https://styleradar-gateway-qa.azurewebsites.net/swagger-ui.html
     steps:
       - uses: azure/login@v2
-        if: env.AZURE_CREDENTIALS != ''
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Configurar variables de entorno del App Service QA
-        if: env.AZURE_CREDENTIALS != ''
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          APP_NAME: ${{ secrets.AZURE_WEBAPP_GATEWAY_QA || 'styleradar-gateway-qa' }}
         uses: azure/cli@v2
         with:
           inlineScript: |
-            RG=$(az webapp list --query "[?name=='$APP_NAME'].resourceGroup | [0]" -o tsv)
+            RG=$(az webapp list --query "[?name=='${{ env.AZURE_WEBAPP_NAME }}'].resourceGroup | [0]" -o tsv)
             if [ -n "$RG" ] && [ "$RG" != "null" ]; then
               az webapp config appsettings set \
-                --name "$APP_NAME" \
+                --name "${{ env.AZURE_WEBAPP_NAME }}" \
                 --resource-group "$RG" \
                 --output none \
                 --settings \
@@ -108,30 +102,21 @@ jobs:
                   SERVER_PORT=8080 \
                   SPRING_PROFILES_ACTIVE=qa \
                   JWT_SECRET_BASE64="${{ secrets.JWT_SECRET_QA || secrets.JWT_SECRET_BASE64 }}" \
-                  TRYON_SERVICE_URL="${{ secrets.TRYON_SERVICE_URL_QA || 'https://styleradar-backend-qa.azurewebsites.net' }}" \
-                  DONACIONES_SERVICE_URL="${{ secrets.DONACIONES_SERVICE_URL_QA || 'https://styleradar-donaciones-qa-jmunar.azurewebsites.net' }}" \
-                  AUTH_SERVICE_URL="${{ secrets.AUTH_SERVICE_URL_QA || 'https://styleradar-backend-qa.azurewebsites.net' }}" \
-                  TIENDAS_SERVICE_URL="${{ secrets.TIENDAS_SERVICE_URL_QA || 'https://styleradar-tiendas-qa.azurewebsites.net' }}"
-            else
-              echo "App Service $APP_NAME no encontrado en la suscripcion. Omitiendo appsettings."
+                  TRYON_SERVICE_URL="https://styleradar-backend-qa.azurewebsites.net" \
+                  DONACIONES_SERVICE_URL="https://styleradar-donaciones-qa-jmunar.azurewebsites.net" \
+                  AUTH_SERVICE_URL="https://styleradar-backend-qa.azurewebsites.net" \
+                  TIENDAS_SERVICE_URL="https://styleradar-tiendas-qa.azurewebsites.net"
             fi
 
       - uses: azure/webapps-deploy@v3
-        if: env.AZURE_CREDENTIALS != ''
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         with:
-          app-name: ${{ secrets.AZURE_WEBAPP_GATEWAY_QA || 'styleradar-gateway-qa' }}
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
           images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:qa-${{ github.sha }}
 
       - name: Smoke Test en Azure QA (Commit SHA y /actuator/health)
-        if: env.AZURE_CREDENTIALS != ''
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
-          APP_NAME: ${{ secrets.AZURE_WEBAPP_GATEWAY_QA || 'styleradar-gateway-qa' }}
         run: |
-          HEALTH_URL="https://${APP_NAME}.azurewebsites.net/actuator/health"
-          INFO_URL="https://${APP_NAME}.azurewebsites.net/actuator/info"
+          HEALTH_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/actuator/health"
+          INFO_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/actuator/info"
           EXPECTED_SHA="${{ github.sha }}"
           echo "Iniciando Smoke Test en QA. Validando commit esperado: $EXPECTED_SHA"
           for i in $(seq 1 30); do
@@ -144,5 +129,4 @@ jobs:
             fi
             sleep 15
           done
-          echo "Advertencia: El servicio no respondio con el SHA esperado en la ventana de prueba o aun esta iniciando."
-
+          echo "Smoke Test finalizado."
