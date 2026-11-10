@@ -9,3 +9,7 @@ logging:
     reactor.netty: INFO
     edu.dosw.styleradar.gateway: DEBUG
 
+security:
+  jwt:
+    secret-base64: ${JWT_SECRET_BASE64:c3R5bGVyYWRhci1qd3Qtc2VjcmV0LWtleS0yMDI2LXBvcnRhbDgwODAtc3VwZXItc2VjdXJlCg==}
+

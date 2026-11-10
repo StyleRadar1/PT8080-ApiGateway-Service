@@ -40,14 +40,21 @@ public class GlobalRequestLoggingFilter implements GlobalFilter, Ordered {
         log.info("[Gateway] [{}] Peticion entrante: {} {}",
                 finalCorrelationId, request.getMethod(), request.getURI().getPath());
 
+        mutatedExchange.getResponse().beforeCommit(() -> {
+            var headers = mutatedExchange.getResponse().getHeaders();
+            if (!headers.containsKey(CORRELATION_ID_HEADER)) {
+                headers.add(CORRELATION_ID_HEADER, finalCorrelationId);
+            }
+            return Mono.empty();
+        });
+
         return chain.filter(mutatedExchange)
-                .then(Mono.fromRunnable(() -> {
+                .doFinally(signalType -> {
                     long duration = System.currentTimeMillis() - startTime;
                     var response = mutatedExchange.getResponse();
-                    response.getHeaders().add(CORRELATION_ID_HEADER, finalCorrelationId);
                     log.info("[Gateway] [{}] Peticion completada en {} ms con estado HTTP {}",
                             finalCorrelationId, duration, response.getStatusCode());
-                }));
+                });
     }
 
     @Override

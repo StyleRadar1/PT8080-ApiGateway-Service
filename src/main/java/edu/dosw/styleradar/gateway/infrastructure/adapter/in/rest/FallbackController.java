@@ -19,7 +19,7 @@ public class FallbackController {
         Map<String, Object> body = Map.of(
                 "status", HttpStatus.SERVICE_UNAVAILABLE.value(),
                 "error", "Servicio No Disponible",
-                "message", "El microservicio de Probador Virtual (ms-probador-virtual :8092) no se encuentra disponible temporalmente. Intente mas tarde.",
+                "message", "El microservicio de Probador Virtual (ms-probador-virtual :8500) no se encuentra disponible temporalmente. Intente mas tarde.",
                 "timestamp", Instant.now().toString(),
                 "service", "ms-probador-virtual"
         );

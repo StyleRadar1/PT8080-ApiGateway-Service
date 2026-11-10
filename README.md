@@ -82,7 +82,7 @@ Este servicio actúa como el **Reverse Proxy perimetral reactivo** para todo el 
 | Qué HACE este API Gateway (Alcance)                                                                                                                        | Qué NO HACE este API Gateway (Límites)                                                                        |
 | :--------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------ |
 | • Punto único de entrada para todas las peticiones frontend hacia los 13 microservicios (`SR-RNF-01`).                                                     | • NO almacena datos de negocio en tablas ni maneja persistencia relacional en disco.                          |
-| • Enruta dinámicamente peticiones HTTP hacia servicios downstream preservando contratos de ruta.                                                            | • NO ejecuta inferencia de IA ni renderizado de siluetas (delegado a `ms-probador-virtual` en `:8092`).       |
+| • Enruta dinámicamente peticiones HTTP hacia servicios downstream preservando contratos de ruta.                                                            | • NO ejecuta inferencia de IA ni renderizado de siluetas (delegado a `ms-probador-virtual` en `:8500`).       |
 | • Inspecciona y valida firmas de tokens JWT Bearer inyectando cabeceras `X-User-Id` y `X-User-Role` hacia la red interna (`SR-RNF-08`).                    | • NO emite ni firma credenciales iniciales de autenticación de usuario (delegado a `ms-auth` en `:8081`).    |
 | • Aplica políticas CORS globales unificadas para clientes React, Angular y móviles (`SR-RNF-03`).                                                          | • NO gestiona inventario de prendas ni catálogos de tiendas (delegado a `ms-catalogo` y `ms-tiendas`).       |
 | • Implementa Circuit Breakers con Resilience4j retornando respuestas de degradación elegante (`Fallback 503`) ante fallos de microservicios downstream.   | • NO procesa transacciones monetarias ni pasarelas de pago bancarias (delegado a `ms-pagos` en `:8090`).     |
@@ -133,7 +133,7 @@ flowchart LR
     B --> C["GlobalRequestLoggingFilter<br>(Inyectar X-Correlation-Id)"]
     C --> D["JwtTokenValidatorFilter<br>(Claims -> X-User-Id)"]
     D --> E["CircuitBreakerFilter<br>(Resilience4j)"]
-    E -->|Ruta Normal| F["Microservicio Downstream<br>(ms-probador-virtual :8092, etc.)"]
+    E -->|Ruta Normal| F["Microservicio Downstream<br>(ms-probador-virtual :8500, etc.)"]
     E -->|Fallo / Timeout| G["FallbackController<br>(HTTP 503 RFC 7807)"]
 
     classDef client fill:#12063A,stroke:#5600EF,stroke-width:2px,color:#FFFFFF;
@@ -161,7 +161,7 @@ sequenceDiagram
     actor Cliente as Frontend (React / Movil)
     participant GW as API Gateway (:8080)
     participant Filter as Cadena de Filtros
-    participant TryOn as ms-probador-virtual (:8092)
+    participant TryOn as ms-probador-virtual (:8500)
     participant Fallback as FallbackController
 
     Cliente->>GW: POST /api/v1/probador/jobs (Bearer JWT)
@@ -197,11 +197,12 @@ sequenceDiagram
 
 | Prefijo de Ruta Expuesto | Microservicio Destino | Puerto Interno | Circuit Breaker Activo | Métodos Permitidos |
 | :--- | :--- | :---: | :---: | :---: |
-| `/api/v1/probador/**` | `ms-probador-virtual` (Portal8080) | `8092` | Sí (`/fallback/probador`) | `GET`, `POST`, `DELETE`, `OPTIONS` |
+| `/api/v1/try-on/**`, `/api/v1/probador/**` | `ms-probador-virtual` (Portal8080) | `8500` | Sí (`/fallback/probador`) | `GET`, `POST`, `DELETE`, `OPTIONS` |
+| `/v3/api-docs/probador` | Documentación OpenAPI Probador | `8500` | No (Reescritura a `/v3/api-docs`) | `GET`, `OPTIONS` |
 | `/api/v1/auth/**` | `ms-auth` | `8081` | No (Paso directo) | `POST`, `OPTIONS` |
 | `/api/v1/catalogo/**` | `ms-catalogo` | `8084` | Sí (`/fallback/general`) | `GET`, `POST`, `PUT`, `OPTIONS` |
 | `/api/v1/tiendas/**` | `ms-tiendas` | `8082` | Sí (`/fallback/general`) | `GET`, `OPTIONS` |
-| `/api/v1/donaciones/**` | `ms-donaciones` | `8093` | Sí (`/fallback/general`) | `GET`, `POST`, `OPTIONS` |
+| `/api/v1/donaciones/**` | `ms-donaciones` | `8520` | Sí (`/fallback/general`) | `GET`, `POST`, `OPTIONS` |
 | `/api/v1/pagos/**` | `ms-pagos` | `8090` | Sí (`/fallback/general`) | `POST`, `GET`, `OPTIONS` |
 | `/api/v1/notificaciones/**` | `ms-notificaciones` | `8091` | No (Paso directo) | `POST`, `GET`, `OPTIONS` |
 | `/actuator/health` | Healthcheck Perimetral | `8080` | N/A (Interno del Gateway) | `GET` |
@@ -231,7 +232,7 @@ Sin embargo, el Gateway interactúa con el ecosistema de eventos y observabilida
    * **`CircuitBreakerTransitionEvent`:** Eventos de conmutación de estado emitidos por Resilience4j (`CLOSED`, `OPEN`, `HALF_OPEN`) redirigiendo peticiones degradadas hacia `FallbackController` (`RFC 7807`).
 
 2. **Propagación Transparente de Eventos hacia RabbitMQ:**
-   * Las solicitudes HTTP enrutadas a microservicios como `ms-probador-virtual` (:8092) o `ms-catalogo` (:8084) disparan la publicación de eventos en el exchange central `styleradar.exchange` (e.g. `foto.subida`, `prenda.procesada`). El Gateway garantiza el paso transparente de la cabecera `X-Correlation-Id` para que los logs de RabbitMQ mantengan la trazabilidad distribuida end-to-end.
+   * Las solicitudes HTTP enrutadas a microservicios como `ms-probador-virtual` (:8500) o `ms-catalogo` (:8084) disparan la publicación de eventos en el exchange central `styleradar.exchange` (e.g. `foto.subida`, `prenda.procesada`). El Gateway garantiza el paso transparente de la cabecera `X-Correlation-Id` para que los logs de RabbitMQ mantengan la trazabilidad distribuida end-to-end.
 
 3. **Políticas de Seguridad Perimetral Centralizadas:**
    * **Manejo Unificado de CORS:** Permite peticiones asíncronas desde los clientes web y móviles (`localhost:3000`, `localhost:4200`, `localhost:5173`, dominios `*.styleradar.co` y Azure), admitiendo credenciales seguras y los métodos `GET, POST, PUT, DELETE, PATCH, OPTIONS`.
@@ -320,14 +321,15 @@ El microservicio utiliza variables de entorno controladas a través de la planti
 | :--- | :--- | :--- | :---: |
 | `SERVER_PORT` | Puerto de escucha HTTP del Gateway | `8080` | Sistema |
 | `SPRING_PROFILES_ACTIVE` | Perfil de configuración de Spring Boot | `dev` | Entorno |
-| `TRYON_SERVICE_URL` | URL de destino del microservicio de Probador Virtual | `http://localhost:8092` | Enrutamiento |
+| `TRYON_SERVICE_URL` | URL de destino del microservicio de Probador Virtual | `http://localhost:8500` | Enrutamiento |
 | `AUTH_SERVICE_URL` | URL de destino del microservicio de Autenticación | `http://localhost:8081` | Enrutamiento |
 | `CATALOGO_SERVICE_URL` | URL de destino del microservicio de Catálogo de Ropa | `http://localhost:8084` | Enrutamiento |
 | `TIENDAS_SERVICE_URL` | URL de destino del microservicio de Tiendas | `http://localhost:8082` | Enrutamiento |
-| `DONACIONES_SERVICE_URL` | URL de destino del microservicio de Donaciones | `http://localhost:8093` | Enrutamiento |
+| `DONACIONES_SERVICE_URL` | URL de destino del microservicio de Donaciones | `http://localhost:8520` | Enrutamiento |
 | `PAGOS_SERVICE_URL` | URL de destino del microservicio de Pagos | `http://localhost:8090` | Enrutamiento |
 | `NOTIFICACIONES_SERVICE_URL` | URL de destino del microservicio de Notificaciones | `http://localhost:8091` | Enrutamiento |
-| `JWT_SECRET` | Clave secreta HMAC para validación de tokens Bearer | `styleradar-jwt-secret-key-2026...` | Seguridad |
+| `JWT_SECRET_BASE64` | Clave secreta HMAC en Base64 para validación perimetral de JWT | `c3R5bGVyYWRhci1qd3Qt...` | Seguridad |
+| `JWT_SECRET` | Clave secreta fallback para retrocompatibilidad | `c3R5bGVyYWRhci1qd3Qt...` | Seguridad |
 
 ---
 
@@ -423,7 +425,7 @@ main                    <-- Código en producción (Desplegado en Azure PROD - S
 <tipo>(<alcance>): <descripción imperativa en español> [#PT8080-XX]
 
 Ejemplos válidos en api-gateway:
-feat(routes): configurar enrutamiento reactivo hacia ms-probador-virtual en puerto 8092
+feat(routes): configurar enrutamiento reactivo hacia ms-probador-virtual en puerto 8500
 fix(cors): admitir cabeceras de autorizacion para clientes en localhost 5173
 test(filter): pruebas unitarias para inyeccion de X-Correlation-Id perimetral
 docs(readme): documentar matriz de rutas y politicas de circuit breaker
@@ -468,5 +470,5 @@ El seguimiento de requerimientos y tareas técnicas del API Gateway se centraliz
 
 <div align="center">
   <img src="docs/images/JiraEvidence.png" alt="Evidencia 05 - Épica PT8080 en Jira" width="100%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
-  <p><sub><b>Figura 12.1:</b> Épica oficial del Squad Portal8080 (<code>PT8080</code>) en Atlassian Jira (<code>ms-probador-virtual (8092) — Probador con IA + Gateway</code>), detallando los requerimientos de perimetría, arquitectura y tareas técnicas del Sprint 1 para el API Gateway y microservicios complementarios.</sub></p>
+  <p><sub><b>Figura 12.1:</b> Épica oficial del Squad Portal8080 (<code>PT8080</code>) en Atlassian Jira (<code>ms-probador-virtual (8500) — Probador con IA + Gateway</code>), detallando los requerimientos de perimetría, arquitectura y tareas técnicas del Sprint 1 para el API Gateway y microservicios complementarios.</sub></p>
 </div>
