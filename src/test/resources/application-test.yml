@@ -1,0 +1,25 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: pt8080-apigateway-service-test
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
+
+security:
+  jwt:
+    secret-base64: c3R5bGVyYWRhci1qd3Qtc2VjcmV0LWtleS0yMDI2LXBvcnRhbDgwODAtc3VwZXItc2VjdXJlCg==
+
