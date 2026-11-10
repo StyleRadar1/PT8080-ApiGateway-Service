@@ -23,6 +23,19 @@
         <springdoc.version>2.5.0</springdoc.version>
         <jjwt.version>0.12.5</jjwt.version>
         <jacoco.version>0.8.11</jacoco.version>
+        <sonar.version>3.11.0.3922</sonar.version>
+
+        <!-- Configuración oficial de SonarQube / SonarCloud (Gate A) -->
+        <sonar.organization>styleradar1</sonar.organization>
+        <sonar.projectKey>StyleRadar1_PT8080-ApiGateway-Service</sonar.projectKey>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+        <sonar.exclusions>
+            **/config/**,
+            **/dto/**,
+            **/exception/**,
+            **/ApiGatewayApplication.java
+        </sonar.exclusions>
     </properties>
 
     <dependencies>
@@ -140,6 +153,12 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <!-- SonarQube / SonarCloud Scanner Plugin -->
+            <plugin>
+                <groupId>org.sonarsource.scanner.maven</groupId>
+                <artifactId>sonar-maven-plugin</artifactId>
+                <version>${sonar.version}</version>
             </plugin>
         </plugins>
     </build>
