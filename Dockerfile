@@ -13,13 +13,23 @@ COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
 
-# Copiar código fuente y compilar
+ARG GIT_COMMIT_SHA=unknown
+
+# Copiar código fuente
 COPY src/ src/
+
+# Incorporar metadatos del Git Commit SHA directamente dentro del artefacto compilado
+RUN mkdir -p src/main/resources && \
+    printf "git.commit.id=%s\ngit.commit.id.abbrev=%s\n" "${GIT_COMMIT_SHA}" "$(echo "${GIT_COMMIT_SHA}" | cut -c1-7)" > src/main/resources/git.properties
+
 RUN ./mvnw clean package -DskipTests -B
 
 # Stage 2: Imagen final liviana de ejecución (JRE Alpine)
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
+
+ARG GIT_COMMIT_SHA=unknown
+ENV APP_GIT_COMMIT_SHA=${GIT_COMMIT_SHA}
 
 # Crear usuario sin privilegios por seguridad
 RUN addgroup -S styleradar && adduser -S gateway -G styleradar
@@ -43,4 +53,3 @@ HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
-

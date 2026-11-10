@@ -1,0 +1,128 @@
+name: CD PROD · PT8080-ApiGateway-Service
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: pt8080-apigateway-service
+  AZURE_WEBAPP_NAME: styleradar-gateway-prod
+
+jobs:
+  test-and-sonar:
+    name: Pruebas, Cobertura JaCoCo (>= 85%) y SonarCloud (Gate A)
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Otorgar permisos a Maven Wrapper
+        run: chmod +x mvnw
+
+      - name: Ejecutar pruebas y verificar cobertura JaCoCo (>= 85%)
+        run: ./mvnw -B clean verify
+
+      - name: Ejecutar análisis SonarQube / SonarCloud (Gate A Obligatorio)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || secrets.SONARCLOUD_TOKEN }}
+        run: ./mvnw -B sonar:sonar -Dsonar.qualitygate.wait=true -Dsonar.token="${{ secrets.SONAR_TOKEN || secrets.SONARCLOUD_TOKEN }}"
+
+  build-push-prod:
+    name: Construir y publicar imagen PROD en Docker Hub
+    needs: test-and-sonar
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            GIT_COMMIT_SHA=${{ github.sha }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:prod-${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-prod:
+    name: Despliegue en Azure App Service PROD (styleradar-gateway-prod)
+    needs: build-push-prod
+    runs-on: ubuntu-latest
+    environment:
+      name: prod
+      url: https://styleradar-gateway-prod.azurewebsites.net/swagger-ui.html
+    steps:
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configurar variables de entorno del App Service PROD
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            RG=$(az webapp list --query "[?name=='${{ env.AZURE_WEBAPP_NAME }}'].resourceGroup | [0]" -o tsv)
+            if [ -z "$RG" ] || [ "$RG" = "null" ]; then
+              echo "Error: No se encontró el grupo de recursos para el App Service ${{ env.AZURE_WEBAPP_NAME }} en Azure."
+              exit 1
+            fi
+            az webapp config appsettings set \
+              --name "${{ env.AZURE_WEBAPP_NAME }}" \
+              --resource-group "$RG" \
+              --output none \
+              --settings \
+                WEBSITES_PORT=8080 \
+                SERVER_PORT=8080 \
+                SPRING_PROFILES_ACTIVE=prod \
+                JWT_SECRET_BASE64="${{ secrets.JWT_SECRET_PROD || secrets.JWT_SECRET_BASE64 }}" \
+                TRYON_SERVICE_URL="https://styleradar-virtualtryon-prod.azurewebsites.net" \
+                DONACIONES_SERVICE_URL="https://styleradar-donaciones-prod-jmunar.azurewebsites.net" \
+                AUTH_SERVICE_URL="https://styleradar-backend-prod.azurewebsites.net" \
+                TIENDAS_SERVICE_URL="https://styleradar-tiendas-prod.azurewebsites.net"
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:prod-${{ github.sha }}
+
+      - name: Smoke Test en Azure PROD (Commit SHA y /actuator/health)
+        run: |
+          HEALTH_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/actuator/health"
+          INFO_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/actuator/info"
+          EXPECTED_SHA="${{ github.sha }}"
+          echo "Iniciando Smoke Test en PROD. Validando commit esperado: $EXPECTED_SHA"
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || true)
+            INFO_BODY=$(curl -s "$INFO_URL" || true)
+            echo "Intento $i: Health HTTP $STATUS | Actuator Info: $INFO_BODY"
+            if [ "$STATUS" = "200" ] && echo "$INFO_BODY" | grep -q "$EXPECTED_SHA"; then
+              echo "Smoke Test exitoso: Gateway PROD respondiendo HTTP 200 y commit SHA verificado ($EXPECTED_SHA)"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Error en Smoke Test: El Gateway PROD no respondió con HTTP 200 y el commit esperado ($EXPECTED_SHA) tras agotar los 30 intentos."
+          exit 1

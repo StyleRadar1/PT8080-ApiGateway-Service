@@ -1,5 +1,5 @@
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${PORT:${WEBSITES_PORT:${SERVER_PORT:8080}}}
 
 spring:
   application:
@@ -30,7 +30,10 @@ spring:
             allowCredentials: true
             maxAge: 3600
       routes:
-        # 1. Documentación OpenAPI del Probador Virtual (transforma /v3/api-docs/probador -> /v3/api-docs)
+        # ==============================================================
+        # 1. Enrutamiento y agregación de especificaciones OpenAPI / Swagger
+        # ==============================================================
+        # Swagger Probador Virtual (transforma /v3/api-docs/probador -> /v3/api-docs en :8500)
         - id: ms-probador-virtual-swagger
           uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:http://localhost:8500}}
           predicates:
@@ -38,7 +41,106 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
-        # 2. Microservicio de Probador Virtual (Paquete 5 · Squad Portal8080 · Puerto 8500)
+        # Swagger Donaciones (transforma /v3/api-docs/donaciones -> /api/v1/v3/api-docs en :8520)
+        - id: ms-donaciones-swagger
+          uri: ${DONACIONES_SERVICE_URL:http://localhost:8520}
+          predicates:
+            - Path=/v3/api-docs/donaciones
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
+        # Swagger Autenticación (transforma /v3/api-docs/auth -> /v3/api-docs en :8100)
+        - id: ms-auth-swagger
+          uri: ${AUTH_SERVICE_URL:http://localhost:8100}
+          predicates:
+            - Path=/v3/api-docs/auth
+          filters:
+            - SetPath=/v3/api-docs
+
+        # Swagger Tiendas (transforma /v3/api-docs/tiendas -> /v3/api-docs en :8140)
+        - id: ms-tiendas-swagger
+          uri: ${TIENDAS_SERVICE_URL:http://localhost:8140}
+          predicates:
+            - Path=/v3/api-docs/tiendas
+          filters:
+            - SetPath=/v3/api-docs
+
+        # ==============================================================
+        # 2. Rutas de Microservicios de Negocio (Matriz Oficial de Puertos)
+        # ==============================================================
+
+        # --- PAQUETE 1: IDENTIDAD (CADche · Bloque 8100) ---
+        # ms-auth: Autenticación, Login y OTP (Puerto 8100)
+        - id: ms-auth
+          uri: ${AUTH_SERVICE_URL:http://localhost:8100}
+          predicates:
+            - Path=/api/v1/auth/**
+
+        # ms-usuarios: Gestión de Usuarios y Perfiles (Puerto 8120)
+        - id: ms-usuarios
+          uri: ${USUARIOS_SERVICE_URL:http://localhost:8120}
+          predicates:
+            - Path=/api/v1/usuarios/**, /api/v1/admin/**
+
+        # ms-tiendas: Registro y Gestión de Almacenes Aliados (Puerto 8140)
+        - id: ms-tiendas
+          uri: ${TIENDAS_SERVICE_URL:http://localhost:8140}
+          predicates:
+            - Path=/api/v1/tiendas/**, /api/v1/almacenes/**
+
+        # --- PAQUETE 2: CATÁLOGO (RESTrepo · Bloque 8200) ---
+        # ms-inventario: Inventario por Talla (Puerto 8200)
+        - id: ms-inventario
+          uri: ${INVENTARIO_SERVICE_URL:http://localhost:8200}
+          predicates:
+            - Path=/api/v1/inventario/**
+
+        # ms-item-catalogo: Catálogo de Prendas y Búsqueda (Puerto 8220)
+        - id: ms-item-catalogo
+          uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
+          predicates:
+            - Path=/api/v1/catalogo/**, /api/v1/prendas/**
+
+        # ms-geolocalizacion: Coordenadas y Mapa de Tiendas (Puerto 8240)
+        - id: ms-geolocalizacion
+          uri: ${GEOLOCALIZACION_SERVICE_URL:http://localhost:8240}
+          predicates:
+            - Path=/api/v1/geolocalizacion/**
+
+        # ms-playlist: Listas de Prendas y Outfits (Puerto 8260)
+        - id: ms-playlist
+          uri: ${PLAYLIST_SERVICE_URL:http://localhost:8260}
+          predicates:
+            - Path=/api/v1/playlist/**
+
+        # --- PAQUETE 3: MENSAJERÍA Y CHAT (Guatoque · Bloque 8300) ---
+        # ms-notificaciones: Alertas y Notificaciones Push/Email (Puerto 8300)
+        - id: ms-notificaciones
+          uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
+          predicates:
+            - Path=/api/v1/notificaciones/**
+
+        # ms-chat: Chat en Vivo y Mensajería de Soporte (Puerto 8320)
+        - id: ms-chat
+          uri: ${CHAT_SERVICE_URL:http://localhost:8320}
+          predicates:
+            - Path=/api/v1/conversaciones/**, /api/v1/chat/**
+
+        # --- PAQUETE 4: PAGOS Y ESTADÍSTICAS (NQS · Bloque 8400) ---
+        # ms-pagos-suscripciones: Pasarela de Pagos y Suscripciones (Puerto 8400)
+        - id: ms-pagos-suscripciones
+          uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
+          predicates:
+            - Path=/api/v1/pagos/**
+
+        # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
+        - id: ms-estadisticas
+          uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8420}
+          predicates:
+            - Path=/api/v1/estadisticas/**
+
+        # --- PAQUETE 5: EXPERIENCIA, DONACIONES Y PROBADOR (Portal 8080 · Bloque 8500) ---
+        # ms-probador-virtual: Probador Virtual con IA FASHN VTON (Puerto 8500)
         - id: ms-probador-virtual
           uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:http://localhost:8500}}
           predicates:
@@ -49,41 +151,16 @@ spring:
                 name: tryonCircuitBreaker
                 fallbackUri: forward:/fallback/probador
 
-        # 3. Microservicio de Autenticación (ms-auth · Puerto 8081)
-        - id: ms-auth
-          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
-          predicates:
-            - Path=/api/v1/auth/**
-
-        # 4. Microservicio de Catálogo de Prendas (ms-catalogo · Puerto 8084)
-        - id: ms-catalogo
-          uri: ${CATALOGO_SERVICE_URL:http://localhost:8084}
-          predicates:
-            - Path=/api/v1/catalogo/**
-
-        # 5. Microservicio de Donaciones (ms-donaciones · Puerto 8520)
-        - id: ms-donaciones
+        # ms-segunda-vida-donaciones: Donaciones y Moda Sostenible (Puerto 8520)
+        - id: ms-segunda-vida-donaciones
           uri: ${DONACIONES_SERVICE_URL:http://localhost:8520}
           predicates:
-            - Path=/api/v1/donaciones/**
-
-        # 6. Microservicio de Tiendas (ms-tiendas · Puerto 8082)
-        - id: ms-tiendas
-          uri: ${TIENDAS_SERVICE_URL:http://localhost:8082}
-          predicates:
-            - Path=/api/v1/tiendas/**
-
-        # 7. Microservicio de Pagos (ms-pagos · Puerto 8090)
-        - id: ms-pagos
-          uri: ${PAGOS_SERVICE_URL:http://localhost:8090}
-          predicates:
-            - Path=/api/v1/pagos/**
-
-        # 8. Microservicio de Notificaciones (ms-notificaciones · Puerto 8091)
-        - id: ms-notificaciones
-          uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8091}
-          predicates:
-            - Path=/api/v1/notificaciones/**
+            - Path=/api/v1/donaciones/**, /api/v1/segunda-mano/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: donacionesCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
 # Configuración de Actuator & Métricas
 management:
@@ -94,6 +171,11 @@ management:
   endpoint:
     health:
       show-details: always
+  info:
+    git:
+      mode: full
+    env:
+      enabled: true
 
 # Documentación OpenAPI Agregada
 springdoc:
@@ -104,13 +186,18 @@ springdoc:
     enabled: true
     path: /swagger-ui.html
     urls:
-      - name: "ms-probador-virtual (:8500)"
-        url: "/v3/api-docs/probador"
       - name: "API Gateway (:8080)"
         url: "/v3/api-docs"
+      - name: "ms-probador-virtual (:8500)"
+        url: "/v3/api-docs/probador"
+      - name: "ms-segunda-vida-donaciones (:8520)"
+        url: "/v3/api-docs/donaciones"
+      - name: "ms-auth (:8100)"
+        url: "/v3/api-docs/auth"
+      - name: "ms-tiendas (:8140)"
+        url: "/v3/api-docs/tiendas"
 
 # Seguridad JWT Perimetral (inyección limpia por variable de entorno, sin clave quemada)
 security:
   jwt:
     secret-base64: ${JWT_SECRET_BASE64:${JWT_SECRET:}}
-
