@@ -65,6 +65,14 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
+        # Swagger Notificaciones (transforma /v3/api-docs/notificaciones -> /v3/api-docs en :8300)
+        - id: ms-notificaciones-swagger
+          uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
+          predicates:
+            - Path=/v3/api-docs/notificaciones
+          filters:
+            - SetPath=/v3/api-docs
+
         # ==============================================================
         # 2. Rutas de Microservicios de Negocio (Matriz Oficial de Puertos)
         # ==============================================================
@@ -196,6 +204,8 @@ springdoc:
         url: "/v3/api-docs/auth"
       - name: "ms-tiendas (:8140)"
         url: "/v3/api-docs/tiendas"
+      - name: "ms-notificaciones (:8300)"
+        url: "/v3/api-docs/notificaciones"
 
 # Seguridad JWT Perimetral (inyección limpia por variable de entorno, sin clave quemada)
 security:
