@@ -100,6 +100,20 @@ spring:
           predicates:
             - Path=/api/v1/auth/**
 
+        # Rutas especificas de almacenes con prioridad sobre la ruta general de Tiendas
+        - id: ms-geolocalizacion-almacenes
+          order: -2
+          uri: ${GEOLOCALIZACION_SERVICE_URL:http://localhost:8240}
+          predicates:
+            - Method=GET
+            - Path=/api/v1/almacenes, /api/v1/almacenes/{id}/distancia, /api/v1/fundaciones/cercanas
+
+        - id: ms-item-catalogo-almacenes
+          order: -2
+          uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
+          predicates:
+            - Method=GET
+            - Path=/api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
         # ms-tiendas: Registro y Gestión de Almacenes Aliados (Puerto 8140)
         - id: ms-tiendas
           uri: ${TIENDAS_SERVICE_URL:http://localhost:8140}
