@@ -30,11 +30,13 @@ import java.util.List;
 /**
  * Filtro perimetral reactivo de validación JWT y control de acceso (SR-RNF-08).
  * - Discrimina rutas públicas incondicionales (Swagger, Actuator, Auth) de rutas protegidas.
- * - Permite acceso anónimo a consultas de publicaciones (/api/v1/second-hand/**, /api/v1/donations/**) bajo método GET.
- * - Mantiene protegidas con 401 Unauthorized las operaciones de creación, edición y donación (POST, PUT, PATCH, DELETE).
- * - Elimina cabeceras X-User-Id y X-User-Role entrantes del cliente para prevenir Spoofing.
+ * - Permite acceso anónimo a consultas públicas de publicaciones (/api/v1/second-hand, /api/v1/segunda-mano) bajo método GET.
+ * - Mantiene protegidas con 401 Unauthorized las consultas privadas de donaciones (/api/v1/donations/**, /api/v1/donaciones/**),
+ *   las consultas privadas de publicaciones por usuario (/api/v1/second-hand/user/**, /api/v1/segunda-mano/user/**)
+ *   y las operaciones de creación, edición y donación (POST, PUT, PATCH, DELETE).
+ * - Elimina cabeceras X-User-Id, X-User-Role y X-User-Roles entrantes del cliente para prevenir Spoofing.
  * - Valida la firma criptográfica HMAC-SHA256 de tokens Bearer JWT; rechaza con 401 si son inválidos o expirados.
- * - Inyecta X-User-Id y X-User-Role downstream ÚNICAMENTE a partir de claims autenticados en el token.
+ * - Inyecta X-User-Id, X-User-Role y X-User-Roles downstream ÚNICAMENTE a partir de claims autenticados en el token.
  */
 @Component
 public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
@@ -42,6 +44,7 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     private static final Logger log = LoggerFactory.getLogger(JwtTokenValidatorFilter.class);
     public static final String USER_ID_HEADER = "X-User-Id";
     public static final String USER_ROLE_HEADER = "X-User-Role";
+    public static final String USER_ROLES_HEADER = "X-User-Roles";
 
     public static final List<String> DEFAULT_PUBLIC_PATHS = List.of(
             "/actuator/health",
@@ -59,17 +62,17 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
 
     public static final List<String> DEFAULT_PUBLIC_GET_PATHS = List.of(
             "/api/v1/second-hand",
-            "/api/v1/second-hand/**",
+            "/api/v1/second-hand/",
+            "/api/v1/second-hand/*",
             "/api/v1/segunda-mano",
-            "/api/v1/segunda-mano/**",
-            "/api/v1/donations",
-            "/api/v1/donations/**",
-            "/api/v1/donaciones",
-            "/api/v1/donaciones/**",
+            "/api/v1/segunda-mano/",
+            "/api/v1/segunda-mano/*",
             "/api/v1/stores",
-            "/api/v1/stores/**",
+            "/api/v1/stores/",
+            "/api/v1/stores/*",
             "/api/v1/tiendas",
-            "/api/v1/tiendas/**",
+            "/api/v1/tiendas/",
+            "/api/v1/tiendas/*",
             "/api/v1/catalogo/**",
             "/api/v1/prendas/**",
             "/api/v1/catalog/**",
@@ -123,11 +126,12 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        // 1. Sanear cabeceras: eliminar cualquier X-User-Id o X-User-Role recibido del cliente (Prevenir Spoofing)
+        // 1. Sanear cabeceras: eliminar cualquier X-User-Id, X-User-Role o X-User-Roles recibido del cliente (Prevenir Spoofing)
         ServerHttpRequest.Builder requestBuilder = request.mutate();
         requestBuilder.headers(httpHeaders -> {
             httpHeaders.remove(USER_ID_HEADER);
             httpHeaders.remove(USER_ROLE_HEADER);
+            httpHeaders.remove(USER_ROLES_HEADER);
         });
 
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
@@ -159,8 +163,24 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
 
                 String userId = claims.getSubject();
                 String role = claims.get("role", String.class);
-                if (role == null && claims.get("roles") != null) {
-                    role = claims.get("roles").toString();
+                Object rolesObj = claims.get("roles");
+                String rolesStr = null;
+                if (rolesObj instanceof Iterable<?> iterable) {
+                    StringBuilder sb = new StringBuilder();
+                    for (Object r : iterable) {
+                        if (!sb.isEmpty()) sb.append(",");
+                        sb.append(r);
+                    }
+                    rolesStr = sb.toString();
+                } else if (rolesObj != null) {
+                    rolesStr = rolesObj.toString();
+                }
+
+                if (role == null && rolesStr != null) {
+                    role = rolesStr;
+                }
+                if (rolesStr == null && role != null) {
+                    rolesStr = role;
                 }
 
                 if (userId != null && !userId.isBlank()) {
@@ -169,8 +189,11 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
                 if (role != null && !role.isBlank()) {
                     requestBuilder.header(USER_ROLE_HEADER, role);
                 }
+                if (rolesStr != null && !rolesStr.isBlank()) {
+                    requestBuilder.header(USER_ROLES_HEADER, rolesStr);
+                }
 
-                log.debug("[Gateway] Token JWT validado exitosamente. Usuario: {}, Rol: {}", userId, role);
+                log.debug("[Gateway] Token JWT validado exitosamente. Usuario: {}, Rol: {}, Roles: {}", userId, role, rolesStr);
             } catch (Exception ex) {
                 log.warn("[Gateway] Petición rechazada (401): Token JWT inválido o expirado ({}) hacia {}",
                         ex.getMessage(), path);
@@ -209,6 +232,13 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
 
     public boolean isPublicGetPath(String path) {
         if (path == null) {
+            return false;
+        }
+        // Exclusión de seguridad estricta: consultas privadas de donaciones y publicaciones por usuario nunca son anónimas
+        if (pathMatcher.match("/api/v1/second-hand/user/**", path)
+                || pathMatcher.match("/api/v1/segunda-mano/user/**", path)
+                || pathMatcher.match("/api/v1/donations/**", path)
+                || pathMatcher.match("/api/v1/donaciones/**", path)) {
             return false;
         }
         return publicGetPaths.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));

@@ -83,7 +83,7 @@ Este servicio actúa como el **Reverse Proxy perimetral reactivo** para todo el 
 | :--------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------ |
 | • Punto único de entrada para todas las peticiones frontend hacia los 13 microservicios (`SR-RNF-01`).                                                     | • NO almacena datos de negocio en tablas ni maneja persistencia relacional en disco.                          |
 | • Enruta dinámicamente peticiones HTTP hacia servicios downstream preservando contratos de ruta.                                                            | • NO ejecuta inferencia de IA ni renderizado de siluetas (delegado a `ms-probador-virtual` en `:8500`).       |
-| • Inspecciona y valida firmas de tokens JWT Bearer inyectando cabeceras `X-User-Id` y `X-User-Role` hacia la red interna (`SR-RNF-08`).                    | • NO emite ni firma credenciales iniciales de autenticación de usuario (delegado a `ms-auth` en `:8081`).    |
+| • Inspecciona y valida firmas de tokens JWT Bearer inyectando cabeceras `X-User-Id`, `X-User-Role` y `X-User-Roles` hacia la red interna (`SR-RNF-08`).                    | • NO emite ni firma credenciales iniciales de autenticación de usuario (delegado a `ms-auth` en `:8081`).    |
 | • Aplica políticas CORS globales unificadas para clientes React, Angular y móviles (`SR-RNF-03`).                                                          | • NO gestiona inventario de prendas ni catálogos de tiendas (delegado a `ms-catalogo` y `ms-tiendas`).       |
 | • Implementa Circuit Breakers con Resilience4j retornando respuestas de degradación elegante (`Fallback 503`) ante fallos de microservicios downstream.   | • NO procesa transacciones monetarias ni pasarelas de pago bancarias (delegado a `ms-pagos` en `:8090`).     |
 | • Centraliza la trazabilidad perimetral inyectando identificadores únicos de correlación (`X-Correlation-Id`).                                            | • NO implementa lógica pesada síncrona que bloquee hilos de ejecución en el EventLoop de Netty.              |
@@ -167,10 +167,10 @@ Cada petición que cruza el Gateway atraviesa una tubería reactiva ordenada:
 
 Este diagrama modela la interacción temporal del flujo de peticiones que cruzan el perímetro del Gateway:
 
-* **Petición con Autenticación Bearer:** El cliente frontend envía una solicitud HTTP con token JWT. El Gateway intercepta la llamada en el puerto `8080`, ejecuta la cadena de filtros reactivos (`GlobalCorsFilter`, `GlobalRequestLoggingFilter` y `JwtTokenValidatorFilter`), sanea las cabeceras entrantes para neutralizar cualquier intento de spoofing y valida la firma criptográfica HMAC-SHA256. Al comprobar su validez, inyecta downstream las cabeceras seguras `X-User-Id` y `X-User-Role` junto al identificador de trazabilidad `X-Correlation-Id`.
+* **Petición con Autenticación Bearer:** El cliente frontend envía una solicitud HTTP con token JWT. El Gateway intercepta la llamada en el puerto `8080`, ejecuta la cadena de filtros reactivos (`GlobalCorsFilter`, `GlobalRequestLoggingFilter` y `JwtTokenValidatorFilter`), sanea las cabeceras entrantes para neutralizar cualquier intento de spoofing (eliminando `X-User-Id`, `X-User-Role` y `X-User-Roles` que provengan del cliente) y valida la firma criptográfica HMAC-SHA256. Al comprobar su validez, inyecta downstream las cabeceras seguras `X-User-Id`, `X-User-Role` y `X-User-Roles` (reconstruidas estrictamente a partir de los claims del token verificado) junto al identificador de trazabilidad `X-Correlation-Id`.
 * **Escenario de Éxito (Camino Saludable):** Si el microservicio downstream se encuentra en estado óptimo, procesa la solicitud y retorna una respuesta exitosa (por ejemplo, `HTTP 202 Accepted` en operaciones asíncronas), la cual es transferida de inmediato al cliente con sobrecarga mínima (< 5 ms).
 * **Tolerancia a Fallos y Degeneración Elegante (Circuit Breaker con Resilience4j):** Si el microservicio de destino experimenta una caída de red, latencia excesiva o supera el umbral de fallos configurado, el Circuit Breaker de Resilience4j entra en estado abierto e intercepta la llamada, redirigiéndola hacia el `FallbackController` interno. El Gateway responde al usuario con un código `HTTP 503 Service Unavailable` formateado bajo el estándar RFC 7807 (Problem Details), protegiendo al ecosistema de fallos en cascada y garantizando una experiencia de usuario amigable.
-* **Acceso Anónimo a Consultas Públicas:** Para las rutas de consulta pública (`GET /api/v1/second-hand/**` y `GET /api/v1/donations/**`), el filtro permite el paso de peticiones anónimas sin token. En contraste, las operaciones de creación, edición o donación (`POST`, `PUT`, `PATCH`, `DELETE`) exigen estrictamente autenticación Bearer, rechazando accesos no autorizados con `HTTP 401 Unauthorized`.
+* **Acceso Anónimo a Consultas Públicas vs Privadas:** Para las consultas de catálogo público (`GET /api/v1/second-hand`, `GET /api/v1/second-hand/*`, `GET /api/v1/segunda-mano`, `GET /api/v1/segunda-mano/*`), el Gateway permite el paso anónimo sin token. En contraste, las consultas privadas de donaciones (`GET /api/v1/donations/**`, `GET /api/v1/donaciones/**`), las consultas privadas por usuario (`GET /api/v1/second-hand/user/**`, `GET /api/v1/segunda-mano/user/**`) y todas las operaciones mutantes (`POST`, `PUT`, `PATCH`, `DELETE`) exigen estrictamente autenticación Bearer, neutralizando cualquier intento de inyección de cabeceras (`X-User-Id`, `X-User-Role`, `X-User-Roles`) y rechazando accesos no autorizados con `HTTP 401 Unauthorized`.
 
 #### 3.4 Diagrama de Despliegue General (Infraestructura de Contenedores y Topología de Red)
 
@@ -290,7 +290,7 @@ Sin embargo, el Gateway interactúa con el ecosistema de eventos y observabilida
 
 1. **Eventos Perimetrales de Ciclo de Vida HTTP (Filtros Reactivos):**
    * **`RequestReceivedEvent` / `CorrelationAssigned`:** Intercepción de solicitud entrante en `GlobalRequestLoggingFilter` asignando y propagando un identificador de trazabilidad distribuida `X-Correlation-Id` (UUIDv4).
-   * **`JwtTokenValidated`:** Inspección en memoria por `JwtTokenValidatorFilter` validando la firma HMAC/RSA del token y propagando las cabeceras `X-User-Id` y `X-User-Role` hacia la red interna.
+   * **`JwtTokenValidated`:** Inspección en memoria por `JwtTokenValidatorFilter` validando la firma HMAC/RSA del token y propagando las cabeceras `X-User-Id`, `X-User-Role` y `X-User-Roles` hacia la red interna.
    * **`CircuitBreakerTransitionEvent`:** Eventos de conmutación de estado emitidos por Resilience4j (`CLOSED`, `OPEN`, `HALF_OPEN`) redirigiendo peticiones degradadas hacia `FallbackController` (`RFC 7807`).
 
 2. **Propagación Transparente de Eventos hacia RabbitMQ:**
@@ -420,10 +420,10 @@ El proyecto exige una cobertura mínima obligatoria del **85%** validada por **J
 
 ### Métricas Actuales de Cobertura en el Repositorio
 
-* **Pruebas Automatizadas:** 9 pruebas unitarias y de integración reactiva ejecutadas.
+* **Pruebas Automatizadas:** 44 pruebas unitarias y de integración reactiva ejecutadas.
 * **Fallos y Errores:** 0 fallos, 0 errores.
-* **Cobertura de Líneas:** **97.4%** (supera con holgura el umbral mínimo del 85%).
-* **Cobertura de Instrucciones:** **98.4%**.
+* **Cobertura de Líneas:** **94.8%** (supera con holgura el umbral mínimo del 85%).
+* **Cobertura de Instrucciones:** **96.3%**.
 * **Resultado del Build:** `BUILD SUCCESS`.
 
 ### Evidencia de Cobertura JaCoCo Verificada (≥ 85%)
@@ -550,7 +550,7 @@ El seguimiento de requerimientos y tareas técnicas del API Gateway se centraliz
 
 ##  13. SEGURIDAD Y ANÁLISIS OWASP TOP 10:2025
 
-El microservicio implementa las directrices oficiales de seguridad perimetral, saneamiento estricto de cabeceras de usuario (`X-User-Id`, `X-User-Role`) y protección contra ataques OWASP Top 10:2025.
+El microservicio implementa las directrices oficiales de seguridad perimetral, saneamiento estricto de cabeceras de usuario (`X-User-Id`, `X-User-Role`, `X-User-Roles`) y protección contra ataques OWASP Top 10:2025.
 
 * **Documento Técnico Oficial:** [docs/security/SR_PT8080_Seguridad_y_OWASP_2025_Gateway.md](docs/security/SR_PT8080_Seguridad_y_OWASP_2025_Gateway.md)
 * **Puntos de Control Principales:**

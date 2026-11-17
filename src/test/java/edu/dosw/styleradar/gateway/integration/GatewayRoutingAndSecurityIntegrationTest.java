@@ -63,11 +63,13 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 exchange.getRequestBody().readAllBytes();
                 String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
                 String userRole = exchange.getRequestHeaders().getFirst("X-User-Role");
+                String userRoles = exchange.getRequestHeaders().getFirst("X-User-Roles");
                 String response = "{"
                         + "\"service\":\"ms-probador-virtual\","
                         + "\"status\":\"UP\","
                         + "\"receivedUserId\":\"" + (userId != null ? userId : "none") + "\","
-                        + "\"receivedUserRole\":\"" + (userRole != null ? userRole : "none") + "\""
+                        + "\"receivedUserRole\":\"" + (userRole != null ? userRole : "none") + "\","
+                        + "\"receivedUserRoles\":\"" + (userRoles != null ? userRoles : "none") + "\""
                         + "}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -155,6 +157,33 @@ class GatewayRoutingAndSecurityIntegrationTest {
                         + "\"service\":\"ms-segunda-vida-donaciones\","
                         + "\"method\":\"" + method + "\","
                         + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 6. Endpoint mock para consulta privada de donación (/api/v1/donations/don-456)
+        mockHttpServer.createContext("/api/v1/donations/don-456", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String userRole = exchange.getRequestHeaders().getFirst("X-User-Role");
+                String userRoles = exchange.getRequestHeaders().getFirst("X-User-Roles");
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"endpoint\":\"/api/v1/donations/don-456\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"receivedUserRole\":\"" + (userRole != null ? userRole : "none") + "\","
+                        + "\"receivedUserRoles\":\"" + (userRoles != null ? userRoles : "none") + "\","
                         + "\"status\":\"UP\""
                         + "}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
@@ -324,7 +353,7 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Seguridad: Token válido elimina intento de spoofing e inyecta identidad auténtica")
+    @DisplayName("Integración Seguridad: Token válido elimina intento de spoofing (X-User-Id, X-User-Role, X-User-Roles) e inyecta identidad auténtica")
     void shouldAuthenticateValidTokenAndSanitizeHeaders() {
         String token = generateValidToken("user-portal8080-real", "ROLE_CLIENTE");
 
@@ -333,11 +362,54 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .header("X-User-Id", "spoofed-user-id")
                 .header("X-User-Role", "ROLE_SUPERADMIN")
+                .header("X-User-Roles", "ROLE_SUPERADMIN,ROLE_OWNER")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.receivedUserId").isEqualTo("user-portal8080-real")
-                .jsonPath("$.receivedUserRole").isEqualTo("ROLE_CLIENTE");
+                .jsonPath("$.receivedUserRole").isEqualTo("ROLE_CLIENTE")
+                .jsonPath("$.receivedUserRoles").isEqualTo("ROLE_CLIENTE");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: Consulta privada anónima a donación (GET /api/v1/donations/{id}) es rechazada con 401")
+    void shouldRejectAnonymousAccessToPrivateDonationQueryWith401() {
+        webTestClient.get()
+                .uri("/api/v1/donations/don-456")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("Unauthorized");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: Consulta privada anónima a publicaciones por usuario (GET /api/v1/second-hand/user/{id}) es rechazada con 401")
+    void shouldRejectAnonymousAccessToPrivateUserSecondHandWith401() {
+        webTestClient.get()
+                .uri("/api/v1/second-hand/user/101")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("Unauthorized");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: Consulta privada a donación con token válido es permitida e inyecta cabeceras")
+    void shouldAllowAuthenticatedAccessToPrivateDonationQuery() {
+        String token = generateValidToken("user-donante-99", "ROLE_DONANTE");
+
+        webTestClient.get()
+                .uri("/api/v1/donations/don-456")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-User-Roles", "SPOOFED_ROLES")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.receivedUserId").isEqualTo("user-donante-99")
+                .jsonPath("$.receivedUserRoles").isEqualTo("ROLE_DONANTE");
     }
 
     @Test

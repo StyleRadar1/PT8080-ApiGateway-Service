@@ -39,6 +39,7 @@ class JwtTokenValidatorFilterTest {
         MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/auth/login")
                 .header(JwtTokenValidatorFilter.USER_ID_HEADER, "attacker-spoofed-id")
                 .header(JwtTokenValidatorFilter.USER_ROLE_HEADER, "ROLE_ADMIN")
+                .header(JwtTokenValidatorFilter.USER_ROLES_HEADER, "ROLE_ADMIN,ROLE_SUPERADMIN")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
@@ -50,6 +51,8 @@ class JwtTokenValidatorFilterTest {
                     "La cabecera X-User-Id del cliente debió ser eliminada para prevenir spoofing");
             assertNull(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER),
                     "La cabecera X-User-Role del cliente debió ser eliminada para prevenir spoofing");
+            assertNull(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER),
+                    "La cabecera X-User-Roles del cliente debió ser eliminada para prevenir spoofing");
             return Mono.empty();
         });
 
@@ -62,6 +65,7 @@ class JwtTokenValidatorFilterTest {
     void filter_rutaProtegidaSinAuthorization_retorna401Unauthorized() {
         MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/try-on/cuotas")
                 .header(JwtTokenValidatorFilter.USER_ID_HEADER, "attacker-spoofed-id")
+                .header(JwtTokenValidatorFilter.USER_ROLES_HEADER, "ROLE_ADMIN")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
@@ -78,7 +82,7 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("Con Token JWT Válido: Inyecta X-User-Id y X-User-Role auténticos y sobreescribe cualquier intento de spoofing")
+    @DisplayName("Con Token JWT Válido: Inyecta X-User-Id, X-User-Role y X-User-Roles auténticos y sobreescribe cualquier intento de spoofing")
     void filter_conTokenValido_inyectaHeadersDeUsuarioYRemueveSpoofed() {
         String token = Jwts.builder()
                 .subject("user-999-portal8080")
@@ -92,6 +96,7 @@ class JwtTokenValidatorFilterTest {
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .header(JwtTokenValidatorFilter.USER_ID_HEADER, "spoofed-user")
                 .header(JwtTokenValidatorFilter.USER_ROLE_HEADER, "ROLE_SUPERADMIN")
+                .header(JwtTokenValidatorFilter.USER_ROLES_HEADER, "ROLE_SUPERADMIN")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
@@ -101,11 +106,43 @@ class JwtTokenValidatorFilterTest {
             chainCalled.set(true);
             assertEquals("user-999-portal8080", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
             assertEquals("ROLE_CLIENTE", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER));
+            assertEquals("ROLE_CLIENTE", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
             return Mono.empty();
         });
 
         StepVerifier.create(result).verifyComplete();
         assertTrue(chainCalled.get(), "La cadena de filtros debió invocarse con petición autenticada");
+    }
+
+    @Test
+    @DisplayName("Con Token JWT con lista de roles: Inyecta X-User-Roles concatenado y elimina spoofing previo")
+    void filter_conTokenValidoListaRoles_inyectaUserRolesConcatenado() {
+        String token = Jwts.builder()
+                .subject("user-fundacion-555")
+                .claim("roles", List.of("ROLE_FOUNDATION", "ROLE_VOLUNTARIO"))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/donations/foundation/555")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(JwtTokenValidatorFilter.USER_ROLES_HEADER, "ROLE_HACKER")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        Mono<Void> result = filter.filter(exchange, ex -> {
+            chainCalled.set(true);
+            assertEquals("user-fundacion-555", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            assertEquals("ROLE_FOUNDATION,ROLE_VOLUNTARIO", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER));
+            assertEquals("ROLE_FOUNDATION,ROLE_VOLUNTARIO", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertTrue(chainCalled.get());
     }
 
     @Test
@@ -226,21 +263,107 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("Consulta Pública GET: Permite acceso anónimo a consultas de publicaciones (/second-hand y /donations)")
-    void isPublicRequest_permiteConsultasGetSegundaManoYDonaciones() {
+    @DisplayName("Consulta Pública GET vs Rutas Privadas: Permite catálogo público (/second-hand) pero bloquea donaciones y consultas por usuario")
+    void isPublicRequest_permiteCatalogoPublicoYBloqueaConsultasPrivadas() {
+        // Endpoints públicos del contrato
         MockServerHttpRequest getSecondHand = MockServerHttpRequest.get("/api/v1/second-hand").build();
         MockServerHttpRequest getSecondHandDetail = MockServerHttpRequest.get("/api/v1/second-hand/prenda-123").build();
         MockServerHttpRequest getSegundaMano = MockServerHttpRequest.get("/api/v1/segunda-mano").build();
+        MockServerHttpRequest getSegundaManoDetail = MockServerHttpRequest.get("/api/v1/segunda-mano/prenda-123").build();
+
+        assertTrue(filter.isPublicRequest(getSecondHand), "GET /second-hand debe ser público");
+        assertTrue(filter.isPublicRequest(getSecondHandDetail), "GET /second-hand/{id} debe ser público");
+        assertTrue(filter.isPublicRequest(getSegundaMano), "GET /segunda-mano debe ser público");
+        assertTrue(filter.isPublicRequest(getSegundaManoDetail), "GET /segunda-mano/{id} debe ser público");
+
+        // Rutas privadas del microservicio: consultas por usuario
+        MockServerHttpRequest getUserSecondHand = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
+        MockServerHttpRequest getUserSegundaMano = MockServerHttpRequest.get("/api/v1/segunda-mano/user/101").build();
+        assertFalse(filter.isPublicRequest(getUserSecondHand), "GET /second-hand/user/{id} es privado");
+        assertFalse(filter.isPublicRequest(getUserSegundaMano), "GET /segunda-mano/user/{id} es privado");
+
+        // Rutas privadas del microservicio: donaciones (detalle, donante, fundación)
         MockServerHttpRequest getDonations = MockServerHttpRequest.get("/api/v1/donations").build();
         MockServerHttpRequest getDonationsDetail = MockServerHttpRequest.get("/api/v1/donations/don-456").build();
+        MockServerHttpRequest getDonationsDonor = MockServerHttpRequest.get("/api/v1/donations/donor/101").build();
+        MockServerHttpRequest getDonationsFoundation = MockServerHttpRequest.get("/api/v1/donations/foundation/501").build();
         MockServerHttpRequest getDonaciones = MockServerHttpRequest.get("/api/v1/donaciones").build();
+        MockServerHttpRequest getDonacionesDetail = MockServerHttpRequest.get("/api/v1/donaciones/don-456").build();
+        MockServerHttpRequest getDonacionesDonor = MockServerHttpRequest.get("/api/v1/donaciones/donor/101").build();
+        MockServerHttpRequest getDonacionesFoundation = MockServerHttpRequest.get("/api/v1/donaciones/foundation/501").build();
 
-        assertTrue(filter.isPublicRequest(getSecondHand));
-        assertTrue(filter.isPublicRequest(getSecondHandDetail));
-        assertTrue(filter.isPublicRequest(getSegundaMano));
-        assertTrue(filter.isPublicRequest(getDonations));
-        assertTrue(filter.isPublicRequest(getDonationsDetail));
-        assertTrue(filter.isPublicRequest(getDonaciones));
+        assertFalse(filter.isPublicRequest(getDonations), "GET /donations no es público");
+        assertFalse(filter.isPublicRequest(getDonationsDetail), "GET /donations/{id} es privado (requiere donante, fundación o admin)");
+        assertFalse(filter.isPublicRequest(getDonationsDonor), "GET /donations/donor/{id} es privado (requiere donante propietario o admin)");
+        assertFalse(filter.isPublicRequest(getDonationsFoundation), "GET /donations/foundation/{id} es privado (requiere fundación receptora o admin)");
+        assertFalse(filter.isPublicRequest(getDonaciones), "GET /donaciones no es público");
+        assertFalse(filter.isPublicRequest(getDonacionesDetail), "GET /donaciones/{id} es privado");
+        assertFalse(filter.isPublicRequest(getDonacionesDonor), "GET /donaciones/donor/{id} es privado");
+        assertFalse(filter.isPublicRequest(getDonacionesFoundation), "GET /donaciones/foundation/{id} es privado");
+    }
+
+    @Test
+    @DisplayName("Filter Consultas Privadas Anónimas: Rechaza con 401 Unauthorized consultas GET privadas de donaciones y usuario")
+    void filter_consultasPrivadasAnonimas_retorna401Unauthorized() {
+        // 1. Consulta privada de donación por ID
+        MockServerHttpRequest reqDonation = MockServerHttpRequest.get("/api/v1/donations/don-456").build();
+        MockServerWebExchange exDonation = MockServerWebExchange.from(reqDonation);
+        StepVerifier.create(filter.filter(exDonation, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exDonation.getResponse().getStatusCode(),
+                "Acceso anónimo a /api/v1/donations/{id} debe retornar 401");
+
+        // 2. Consulta privada de donaciones por donante
+        MockServerHttpRequest reqDonor = MockServerHttpRequest.get("/api/v1/donations/donor/101").build();
+        MockServerWebExchange exDonor = MockServerWebExchange.from(reqDonor);
+        StepVerifier.create(filter.filter(exDonor, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exDonor.getResponse().getStatusCode(),
+                "Acceso anónimo a /api/v1/donations/donor/{donorId} debe retornar 401");
+
+        // 3. Consulta privada de donaciones por fundación
+        MockServerHttpRequest reqFoundation = MockServerHttpRequest.get("/api/v1/donaciones/foundation/501").build();
+        MockServerWebExchange exFoundation = MockServerWebExchange.from(reqFoundation);
+        StepVerifier.create(filter.filter(exFoundation, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exFoundation.getResponse().getStatusCode(),
+                "Acceso anónimo a /api/v1/donaciones/foundation/{foundationId} debe retornar 401");
+
+        // 4. Consulta privada de publicaciones de un usuario específico
+        MockServerHttpRequest reqUserPubs = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
+        MockServerWebExchange exUserPubs = MockServerWebExchange.from(reqUserPubs);
+        StepVerifier.create(filter.filter(exUserPubs, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exUserPubs.getResponse().getStatusCode(),
+                "Acceso anónimo a /api/v1/second-hand/user/{userId} debe retornar 401");
+    }
+
+    @Test
+    @DisplayName("Filter Consultas Privadas con Token Válido: Permite acceso a donaciones e inyecta cabeceras saneadas")
+    void filter_consultaPrivadaDonacionesConTokenValido_permiteAccesoEInyectaCabeceras() {
+        String token = Jwts.builder()
+                .subject("fundacion-bogota-88")
+                .claim("role", "ROLE_FOUNDATION")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/donations/foundation/88")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(JwtTokenValidatorFilter.USER_ID_HEADER, "spoofed-user")
+                .header(JwtTokenValidatorFilter.USER_ROLES_HEADER, "ROLE_ADMIN")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        Mono<Void> result = filter.filter(exchange, ex -> {
+            chainCalled.set(true);
+            assertEquals("fundacion-bogota-88", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            assertEquals("ROLE_FOUNDATION", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER));
+            assertEquals("ROLE_FOUNDATION", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertTrue(chainCalled.get(), "La consulta autenticada debe continuar hacia downstream");
     }
 
     @Test
