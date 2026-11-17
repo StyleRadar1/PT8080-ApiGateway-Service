@@ -15,6 +15,7 @@ import reactor.test.StepVerifier;
 import javax.crypto.SecretKey;
 import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,8 +34,8 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("Sin Authorization Header: Continúa hacia downstream pero eliminando cabeceras X-User-* inyectadas por el cliente")
-    void filter_sinAuthorizationHeader_eliminaHeadersSpoofed() {
+    @DisplayName("Ruta Pública sin Authorization: Permite continuar hacia downstream y elimina cabeceras X-User-* inyectadas por el cliente")
+    void filter_rutaPublicaSinAuthorizationHeader_eliminaHeadersSpoofedYContinua() {
         MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/auth/login")
                 .header(JwtTokenValidatorFilter.USER_ID_HEADER, "attacker-spoofed-id")
                 .header(JwtTokenValidatorFilter.USER_ROLE_HEADER, "ROLE_ADMIN")
@@ -53,7 +54,27 @@ class JwtTokenValidatorFilterTest {
         });
 
         StepVerifier.create(result).verifyComplete();
-        assertTrue(chainCalled.get(), "La cadena de filtros debió continuar para petición sin token");
+        assertTrue(chainCalled.get(), "La cadena de filtros debió continuar para petición pública sin token");
+    }
+
+    @Test
+    @DisplayName("Ruta Protegida sin Authorization: Rechaza inmediatamente con 401 Unauthorized y NO llama a downstream")
+    void filter_rutaProtegidaSinAuthorization_retorna401Unauthorized() {
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/try-on/cuotas")
+                .header(JwtTokenValidatorFilter.USER_ID_HEADER, "attacker-spoofed-id")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        Mono<Void> result = filter.filter(exchange, ex -> {
+            chainCalled.set(true);
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertFalse(chainCalled.get(), "Downstream no debe ser invocado cuando falta el token en ruta protegida");
+        assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
     }
 
     @Test
@@ -152,5 +173,33 @@ class JwtTokenValidatorFilterTest {
         });
 
         StepVerifier.create(result).verifyComplete();
+    }
+
+    @Test
+    @DisplayName("Discriminación de rutas públicas vs protegidas: isPublicPath valida correctamente los patrones")
+    void isPublicPath_validaPatronesCorrectamente() {
+        assertTrue(filter.isPublicPath("/actuator/health"));
+        assertTrue(filter.isPublicPath("/swagger-ui.html"));
+        assertTrue(filter.isPublicPath("/swagger-ui/index.html"));
+        assertTrue(filter.isPublicPath("/v3/api-docs"));
+        assertTrue(filter.isPublicPath("/v3/api-docs/probador"));
+        assertTrue(filter.isPublicPath("/api/v1/auth/login"));
+        assertTrue(filter.isPublicPath("/api/v1/auth/register"));
+        assertTrue(filter.isPublicPath("/fallback/probador"));
+
+        assertFalse(filter.isPublicPath("/api/v1/try-on/jobs"));
+        assertFalse(filter.isPublicPath("/api/v1/probador/siluetas"));
+        assertFalse(filter.isPublicPath("/api/v1/donaciones/campanas"));
+        assertFalse(filter.isPublicPath("/api/v1/inventario/items"));
+        assertFalse(filter.isPublicPath("/api/v1/pagos/checkout"));
+        assertFalse(filter.isPublicPath(null));
+    }
+
+    @Test
+    @DisplayName("Constructor con rutas públicas personalizadas funciona adecuadamente")
+    void constructor_conRutasPersonalizadas() {
+        JwtTokenValidatorFilter customFilter = new JwtTokenValidatorFilter(SECRET_BASE64, List.of("/custom/public/**"));
+        assertTrue(customFilter.isPublicPath("/custom/public/test"));
+        assertFalse(customFilter.isPublicPath("/actuator/health"));
     }
 }

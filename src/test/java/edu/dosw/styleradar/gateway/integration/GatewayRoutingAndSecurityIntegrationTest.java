@@ -149,20 +149,32 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Enrutamiento: /api/v1/try-on/** se enruta correctamente al backend del Probador Virtual")
-    void shouldRouteTryOnServiceCorrectly() {
+    @DisplayName("Integración Seguridad: Acceso anónimo a ruta protegida (/api/v1/try-on/health) es rechazado con 401")
+    void shouldRejectAnonymousAccessToTryOnServiceWith401() {
         webTestClient.get()
                 .uri("/api/v1/try-on/health")
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus().isUnauthorized()
                 .expectBody()
-                .jsonPath("$.service").isEqualTo("ms-probador-virtual")
-                .jsonPath("$.status").isEqualTo("UP");
+                .jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("Unauthorized");
     }
 
     @Test
-    @DisplayName("Integración Swagger: /v3/api-docs/probador se reescribe como /v3/api-docs y entrega la especificación OpenAPI")
-    void shouldRewriteAndRouteSwaggerProbadorCorrectly() {
+    @DisplayName("Integración Seguridad: Acceso anónimo a ruta protegida (/api/v1/donaciones/health) es rechazado con 401")
+    void shouldRejectAnonymousAccessToDonacionesWith401() {
+        webTestClient.get()
+                .uri("/api/v1/donaciones/health")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("Unauthorized");
+    }
+
+    @Test
+    @DisplayName("Integración Swagger: Ruta pública (/v3/api-docs/probador) permite acceso anónimo y entrega OpenAPI")
+    void shouldAllowAnonymousAccessToSwaggerProbador() {
         webTestClient.get()
                 .uri("/v3/api-docs/probador")
                 .exchange()
@@ -173,18 +185,37 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Enrutamiento: /api/v1/donaciones/** se enruta hacia el microservicio de Donaciones (8520)")
-    void shouldRouteDonacionesServiceCorrectly() {
+    @DisplayName("Integración Enrutamiento con Token: /api/v1/try-on/** se enruta correctamente con token válido")
+    void shouldRouteTryOnServiceCorrectlyWithValidToken() {
+        String token = generateValidToken("user-tryon-auth", "ROLE_COMPRADOR");
+
         webTestClient.get()
-                .uri("/api/v1/donaciones/health")
+                .uri("/api/v1/try-on/health")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.service").isEqualTo("ms-donaciones");
+                .jsonPath("$.service").isEqualTo("ms-probador-virtual")
+                .jsonPath("$.status").isEqualTo("UP");
     }
 
     @Test
-    @DisplayName("Integración Seguridad: Petición con Bearer Token válido elimina spoofing e inyecta identidad autenticada")
+    @DisplayName("Integración Enrutamiento con Token: /api/v1/donaciones/** se enruta correctamente con token válido")
+    void shouldRouteDonacionesServiceCorrectlyWithValidToken() {
+        String token = generateValidToken("user-dona-auth", "ROLE_DONANTE");
+
+        webTestClient.get()
+                .uri("/api/v1/donaciones/health")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-donaciones")
+                .jsonPath("$.status").isEqualTo("UP");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: Token válido elimina intento de spoofing e inyecta identidad auténtica")
     void shouldAuthenticateValidTokenAndSanitizeHeaders() {
         String token = generateValidToken("user-portal8080-real", "ROLE_CLIENTE");
 
@@ -201,7 +232,7 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Seguridad: Petición con Token JWT inválido es rechazada con 401 por el Gateway")
+    @DisplayName("Integración Seguridad: Token JWT manipulado o inválido es rechazado con 401 por el Gateway")
     void shouldRejectInvalidTokenWith401Unauthorized() {
         webTestClient.get()
                 .uri("/api/v1/try-on/health")
@@ -211,19 +242,5 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .expectBody()
                 .jsonPath("$.status").isEqualTo(401)
                 .jsonPath("$.error").isEqualTo("Unauthorized");
-    }
-
-    @Test
-    @DisplayName("Integración Seguridad: Petición anónima con cabeceras X-User-* falsificadas son eliminadas por el Gateway")
-    void shouldStripSpoofedHeadersOnAnonymousRequests() {
-        webTestClient.get()
-                .uri("/api/v1/try-on/health")
-                .header("X-User-Id", "attacker-admin-id")
-                .header("X-User-Role", "ROLE_ADMIN")
-                .exchange()
-                .expectStatus().isOk()
-                .expectBody()
-                .jsonPath("$.receivedUserId").isEqualTo("none")
-                .jsonPath("$.receivedUserRole").isEqualTo("none");
     }
 }

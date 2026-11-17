@@ -100,8 +100,17 @@ jobs:
                 JWT_SECRET_BASE64="${{ secrets.JWT_SECRET_PROD || secrets.JWT_SECRET_BASE64 }}" \
                 TRYON_SERVICE_URL="https://styleradar-virtualtryon-prod.azurewebsites.net" \
                 DONACIONES_SERVICE_URL="https://styleradar-donaciones-prod-jmunar.azurewebsites.net" \
-                AUTH_SERVICE_URL="https://styleradar-backend-prod.azurewebsites.net" \
-                TIENDAS_SERVICE_URL="https://styleradar-tiendas-prod.azurewebsites.net"
+                AUTH_SERVICE_URL="https://styleradar-auth-prod.azurewebsites.net" \
+                USUARIOS_SERVICE_URL="https://styleradar-prod-app.azurewebsites.net" \
+                TIENDAS_SERVICE_URL="https://styleradar-tiendas-prod.azurewebsites.net" \
+                NOTIFICACIONES_SERVICE_URL="https://styleradar-notificaciones-prod.azurewebsites.net" \
+                INVENTARIO_SERVICE_URL="https://styleradar-inventario-prod.azurewebsites.net" \
+                CATALOGO_SERVICE_URL="https://styleradar-catalogo-prod.azurewebsites.net" \
+                GEOLOCALIZACION_SERVICE_URL="https://styleradar-geolocalizacion-prod.azurewebsites.net" \
+                PLAYLIST_SERVICE_URL="https://styleradar-playlist-prod.azurewebsites.net" \
+                CHAT_SERVICE_URL="https://styleradar-chat-prod.azurewebsites.net" \
+                PAGOS_SERVICE_URL="https://styleradar-pagos-prod.azurewebsites.net" \
+                ESTADISTICAS_SERVICE_URL="https://styleradar-estadisticas-prod.azurewebsites.net"
 
       - uses: azure/webapps-deploy@v3
         with:

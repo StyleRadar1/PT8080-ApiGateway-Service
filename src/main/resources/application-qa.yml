@@ -66,22 +66,22 @@ spring:
 
         # Paquete 2: Catálogo
         - id: ms-inventario
-          uri: ${INVENTARIO_SERVICE_URL:http://localhost:8200}
+          uri: ${INVENTARIO_SERVICE_URL:https://styleradar-inventario-qa.azurewebsites.net}
           predicates:
             - Path=/api/v1/inventario/**
 
         - id: ms-item-catalogo
-          uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
+          uri: ${CATALOGO_SERVICE_URL:https://styleradar-catalogo-qa.azurewebsites.net}
           predicates:
             - Path=/api/v1/catalogo/**, /api/v1/prendas/**
 
         - id: ms-geolocalizacion
-          uri: ${GEOLOCALIZACION_SERVICE_URL:http://localhost:8240}
+          uri: ${GEOLOCALIZACION_SERVICE_URL:https://styleradar-geolocalizacion-qa.azurewebsites.net}
           predicates:
             - Path=/api/v1/geolocalizacion/**
 
         - id: ms-playlist
-          uri: ${PLAYLIST_SERVICE_URL:http://localhost:8260}
+          uri: ${PLAYLIST_SERVICE_URL:https://styleradar-playlist-qa.azurewebsites.net}
           predicates:
             - Path=/api/v1/playlist/**
 
@@ -92,18 +92,18 @@ spring:
             - Path=/api/v1/notificaciones/**
 
         - id: ms-chat
-          uri: ${CHAT_SERVICE_URL:http://localhost:8320}
+          uri: ${CHAT_SERVICE_URL:https://styleradar-chat-qa.azurewebsites.net}
           predicates:
             - Path=/api/v1/conversaciones/**, /api/v1/chat/**
 
         # Paquete 4: Pagos y Estadísticas
         - id: ms-pagos-suscripciones
-          uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
+          uri: ${PAGOS_SERVICE_URL:https://styleradar-pagos-qa.azurewebsites.net}
           predicates:
             - Path=/api/v1/pagos/**
 
         - id: ms-estadisticas
-          uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8091}
+          uri: ${ESTADISTICAS_SERVICE_URL:https://styleradar-estadisticas-qa.azurewebsites.net}
           predicates:
             - Path=/api/v1/estadisticas/**
 
@@ -142,4 +142,3 @@ logging:
     root: INFO
     org.springframework.cloud.gateway: INFO
     edu.dosw.styleradar.gateway: INFO
-
