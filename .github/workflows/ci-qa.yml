@@ -110,12 +110,13 @@ jobs:
                 USUARIOS_SERVICE_URL="https://styleradar-qa-app.azurewebsites.net" \
                 TIENDAS_SERVICE_URL="https://styleradar-tiendas-qa.azurewebsites.net" \
                 NOTIFICACIONES_SERVICE_URL="https://styleradar-notificaciones-qa.azurewebsites.net" \
-                INVENTARIO_SERVICE_URL="https://styleradar-inventario-qa.azurewebsites.net" \
-                CATALOGO_SERVICE_URL="https://styleradar-catalogo-qa.azurewebsites.net" \
-                GEOLOCALIZACION_SERVICE_URL="https://styleradar-geolocalizacion-qa.azurewebsites.net" \
-                PLAYLIST_SERVICE_URL="https://styleradar-playlist-qa.azurewebsites.net" \
-                CHAT_SERVICE_URL="https://styleradar-chat-qa.azurewebsites.net" \
-                PAGOS_SERVICE_URL="https://styleradar-pagos-qa.azurewebsites.net" \
+                INVENTARIO_SERVICE_URL="https://rst-inventory-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                CATALOGO_SERVICE_URL="https://rst-itemcatalog-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                GEOLOCALIZACION_SERVICE_URL="https://rst-geolocation-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                PLAYLIST_SERVICE_URL="https://rst-playlist-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                CHAT_SERVICE_URL="https://gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net" \
+                CHAT_WS_SERVICE_URL="wss://gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net" \
+                PAGOS_SERVICE_URL="https://ca-styleradar-pagos-juangv1.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io" \
                 ESTADISTICAS_SERVICE_URL="https://styleradar-estadisticas-qa.azurewebsites.net"
 
       - uses: azure/webapps-deploy@v3

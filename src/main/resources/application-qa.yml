@@ -133,9 +133,10 @@ spring:
 
         # Paquete 4: Pagos y Estadísticas
         - id: ms-pagos-suscripciones
-          uri: ${PAGOS_SERVICE_URL:https://styleradar-pagos-qa.azurewebsites.net}
+          order: -1
+          uri: ${PAGOS_SERVICE_URL:https://ca-styleradar-pagos-juangv1.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/pagos/**, /api/v1/payments/**, /api/v1/subscriptions/**
+            - Path=/api/v1/pagos/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/suscripciones/**, /api/v1/planes/**, /api/v1/webhooks/**, /api/v1/admin/pagos/**
 
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:https://styleradar-estadisticas-qa.azurewebsites.net}

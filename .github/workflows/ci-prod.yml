@@ -104,12 +104,13 @@ jobs:
                 USUARIOS_SERVICE_URL="https://styleradar-prod-app.azurewebsites.net" \
                 TIENDAS_SERVICE_URL="https://styleradar-tiendas-prod.azurewebsites.net" \
                 NOTIFICACIONES_SERVICE_URL="https://styleradar-notificaciones-prod.azurewebsites.net" \
-                INVENTARIO_SERVICE_URL="https://styleradar-inventario-prod.azurewebsites.net" \
-                CATALOGO_SERVICE_URL="https://styleradar-catalogo-prod.azurewebsites.net" \
-                GEOLOCALIZACION_SERVICE_URL="https://styleradar-geolocalizacion-prod.azurewebsites.net" \
-                PLAYLIST_SERVICE_URL="https://styleradar-playlist-prod.azurewebsites.net" \
-                CHAT_SERVICE_URL="https://styleradar-chat-prod.azurewebsites.net" \
-                PAGOS_SERVICE_URL="https://styleradar-pagos-prod.azurewebsites.net" \
+                INVENTARIO_SERVICE_URL="https://rst-inventory-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                CATALOGO_SERVICE_URL="https://rst-itemcatalog-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                GEOLOCALIZACION_SERVICE_URL="https://rst-geolocation-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                PLAYLIST_SERVICE_URL="https://rst-playlist-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io" \
+                CHAT_SERVICE_URL="https://gj-chat-service-prod-santi.azurewebsites.net" \
+                CHAT_WS_SERVICE_URL="wss://gj-chat-service-prod-santi.azurewebsites.net" \
+                PAGOS_SERVICE_URL="https://ca-styleradar-pagos-prod.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io" \
                 ESTADISTICAS_SERVICE_URL="https://styleradar-estadisticas-prod.azurewebsites.net"
 
       - uses: azure/webapps-deploy@v3

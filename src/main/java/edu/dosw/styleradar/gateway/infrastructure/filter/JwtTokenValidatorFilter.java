@@ -62,7 +62,8 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/ws",
             "/ws/**",
             "/ws-chat",
-            "/ws-chat/**"
+            "/ws-chat/**",
+            "/api/v1/webhooks/**"
     );
 
     public static final List<String> DEFAULT_PUBLIC_GET_PATHS = List.of(
@@ -93,7 +94,9 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/almacenes/*/catalogo",
             "/api/v1/almacenes/*/catalogo/resumen",
             "/api/v1/almacenes/*/novedades",
-            "/api/v1/fundaciones/cercanas"
+            "/api/v1/fundaciones/cercanas",
+            "/api/v1/planes",
+            "/api/v1/planes/**"
     );
 
     private final SecretKey secretKey;

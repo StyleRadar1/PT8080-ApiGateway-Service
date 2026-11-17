@@ -37,6 +37,8 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     private static final HttpServer GEO = newServer("ms-geolocalizacion");
     private static final HttpServer CATALOGO = newServer("ms-item-catalogo");
     private static final HttpServer TIENDAS = newServer("ms-tiendas");
+    private static final HttpServer PAGOS = newServer("ms-pagos");
+    private static final HttpServer USUARIOS = newServer("ms-usuarios");
 
     @Autowired
     private WebTestClient webTestClient;
@@ -79,6 +81,8 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         GEO.stop(0);
         CATALOGO.stop(0);
         TIENDAS.stop(0);
+        PAGOS.stop(0);
+        USUARIOS.stop(0);
     }
 
     @DynamicPropertySource
@@ -86,6 +90,8 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         registry.add("GEOLOCALIZACION_SERVICE_URL", () -> "http://127.0.0.1:" + GEO.getAddress().getPort());
         registry.add("CATALOGO_SERVICE_URL", () -> "http://127.0.0.1:" + CATALOGO.getAddress().getPort());
         registry.add("TIENDAS_SERVICE_URL", () -> "http://127.0.0.1:" + TIENDAS.getAddress().getPort());
+        registry.add("PAGOS_SERVICE_URL", () -> "http://127.0.0.1:" + PAGOS.getAddress().getPort());
+        registry.add("USUARIOS_SERVICE_URL", () -> "http://127.0.0.1:" + USUARIOS.getAddress().getPort());
         registry.add("security.jwt.secret-base64", () -> SECRET);
     }
 
@@ -171,5 +177,26 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     void shouldAllowPublicPrendasAndProtectWrites() {
         assertRoutedTo("/api/v1/prendas", "ms-item-catalogo");
         webTestClient.post().uri("/api/v1/prendas").exchange().expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("Pagos: rutas reales publicadas por ms-pagos llegan a Pagos (incluido /admin/pagos sobre /admin/**)")
+    void shouldRoutePagosRealPaths() {
+        String token = token("7", List.of("ADMIN_STYLERADAR"), null);
+        for (String uri : List.of("/api/v1/suscripciones/5", "/api/v1/pagos/historial", "/api/v1/admin/pagos")) {
+            webTestClient.get().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
+        }
+        assertRoutedTo("/api/v1/planes", "ms-pagos");
+    }
+
+    @Test
+    @DisplayName("Pagos: webhook de MercadoPago es publico (sin JWT) pero las operaciones de pago privadas exigen token")
+    void shouldAllowWebhookAndProtectPrivatePagos() {
+        webTestClient.post().uri("/api/v1/webhooks/mercadopago").exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
+        webTestClient.post().uri("/api/v1/suscripciones/iniciar").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/pagos/historial").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/admin/pagos").exchange().expectStatus().isUnauthorized();
     }
 }

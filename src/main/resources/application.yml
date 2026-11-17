@@ -174,9 +174,10 @@ spring:
         # --- PAQUETE 4: PAGOS Y ESTADÍSTICAS (NQS · Bloque 8400) ---
         # ms-pagos-suscripciones: Pasarela de Pagos y Suscripciones (Puerto 8400)
         - id: ms-pagos-suscripciones
+          order: -1
           uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
           predicates:
-            - Path=/api/v1/pagos/**, /api/v1/payments/**, /api/v1/subscriptions/**
+            - Path=/api/v1/pagos/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/suscripciones/**, /api/v1/planes/**, /api/v1/webhooks/**, /api/v1/admin/pagos/**
 
         # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
         - id: ms-estadisticas
