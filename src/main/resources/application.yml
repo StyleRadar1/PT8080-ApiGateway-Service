@@ -140,15 +140,16 @@ spring:
         # --- PAQUETE 3: MENSAJERÍA Y CHAT (Guatoque · Bloque 8300) ---
         # ms-notificaciones: Alertas y Notificaciones Push/Email (Puerto 8300)
         - id: ms-notificaciones
+          order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
           predicates:
-            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**
+            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/users/*/notifications
 
-        # ms-chat: Chat en Vivo y Mensajería de Soporte (Puerto 8320)
+        # ms-chat: Chat en Vivo, WebSockets y Mensajería (Puerto 8320)
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:http://localhost:8320}
           predicates:
-            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**
+            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**, /ws/**, /ws-chat/**, /ws
 
         # --- PAQUETE 4: PAGOS Y ESTADÍSTICAS (NQS · Bloque 8400) ---
         # ms-pagos-suscripciones: Pasarela de Pagos y Suscripciones (Puerto 8400)

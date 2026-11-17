@@ -268,6 +268,50 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 exchange.close();
             }
         });
+
+        // 10. Endpoint mock para chat / WebSocket handshake (/ws)
+        mockHttpServer.createContext("/ws", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String response = "{"
+                        + "\"service\":\"ms-chat\","
+                        + "\"endpoint\":\"/ws\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 11. Endpoint mock para notificaciones por usuario (/api/v1/users/user-101/notifications)
+        mockHttpServer.createContext("/api/v1/users/user-101/notifications", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String response = "{"
+                        + "\"service\":\"ms-notificaciones\","
+                        + "\"endpoint\":\"/api/v1/users/user-101/notifications\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
     }
 
     @AfterAll
@@ -284,6 +328,8 @@ class GatewayRoutingAndSecurityIntegrationTest {
     static void registerDynamicProperties(DynamicPropertyRegistry registry) {
         registry.add("TRYON_SERVICE_URL", () -> "http://127.0.0.1:" + mockPort);
         registry.add("DONACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + mockPort);
+        registry.add("NOTIFICACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + mockPort);
+        registry.add("CHAT_SERVICE_URL", () -> "http://127.0.0.1:" + mockPort);
         registry.add("security.jwt.secret-base64", () -> TEST_SECRET_BASE64);
     }
 
@@ -567,5 +613,32 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .uri("/actuator/gateway/routes")
                 .exchange()
                 .expectStatus().isNotFound();
+    }
+
+    @Test
+    @DisplayName("Integración Chat/WebSocket: Handshake anónimo (/ws) es permitido como ruta pública y enrutado a ms-chat")
+    void shouldAllowWebSocketHandshakeWithoutTokenAndRouteToChat() {
+        webTestClient.get()
+                .uri("/ws")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-chat")
+                .jsonPath("$.endpoint").isEqualTo("/ws");
+    }
+
+    @Test
+    @DisplayName("Integración Notificaciones: Consulta por usuario (/api/v1/users/{userId}/notifications) se enruta a ms-notificaciones con token válido")
+    void shouldRouteUserNotificationsWithValidToken() {
+        String token = generateValidToken("user-101", "USER");
+
+        webTestClient.get()
+                .uri("/api/v1/users/user-101/notifications")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-notificaciones")
+                .jsonPath("$.receivedUserId").isEqualTo("user-101");
     }
 }

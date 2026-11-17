@@ -57,7 +57,11 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/auth/**",
             "/fallback/**",
             "/favicon.ico",
-            "/webjars/**"
+            "/webjars/**",
+            "/ws",
+            "/ws/**",
+            "/ws-chat",
+            "/ws-chat/**"
     );
 
     public static final List<String> DEFAULT_PUBLIC_GET_PATHS = List.of(

@@ -102,14 +102,15 @@ spring:
 
         # Paquete 3: Mensajería
         - id: ms-notificaciones
+          order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-qa.azurewebsites.net}
           predicates:
-            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**
+            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/users/*/notifications
 
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net}
           predicates:
-            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**
+            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**, /ws/**, /ws-chat/**, /ws
 
         # Paquete 4: Pagos y Estadísticas
         - id: ms-pagos-suscripciones

@@ -224,6 +224,10 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicPath("/api/v1/auth/login"));
         assertTrue(filter.isPublicPath("/api/v1/auth/register"));
         assertTrue(filter.isPublicPath("/fallback/probador"));
+        assertTrue(filter.isPublicPath("/ws"));
+        assertTrue(filter.isPublicPath("/ws/chat"));
+        assertTrue(filter.isPublicPath("/ws-chat"));
+        assertTrue(filter.isPublicPath("/ws-chat/info"));
 
         assertFalse(filter.isPublicPath("/actuator/gateway"));
         assertFalse(filter.isPublicPath("/actuator/gateway/routes"));
