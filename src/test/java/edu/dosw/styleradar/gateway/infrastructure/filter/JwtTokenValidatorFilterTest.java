@@ -575,6 +575,10 @@ class JwtTokenValidatorFilterTest {
         io.jsonwebtoken.Claims claims4 = Jwts.claims().add("store_id", "STORE-202").build();
         assertEquals("STORE-202", JwtTokenValidatorFilter.extractAlmacenId(claims4));
 
+        String sampleUuid = java.util.UUID.randomUUID().toString();
+        io.jsonwebtoken.Claims claimsUuid = Jwts.claims().add("almacenId", sampleUuid).build();
+        assertEquals(sampleUuid, JwtTokenValidatorFilter.extractAlmacenId(claimsUuid));
+
         io.jsonwebtoken.Claims claimsInvalid = Jwts.claims().add("almacenId", "INVALID@@@$$").build();
         assertNull(JwtTokenValidatorFilter.extractAlmacenId(claimsInvalid));
 
@@ -591,6 +595,15 @@ class JwtTokenValidatorFilterTest {
 
         MockServerHttpRequest optReq = MockServerHttpRequest.options("/api/v1/any/endpoint").build();
         assertTrue(filter.isPublicRequest(optReq));
+
+        MockServerHttpRequest prendasReq = MockServerHttpRequest.get("/api/v1/prendas").build();
+        assertTrue(filter.isPublicRequest(prendasReq), "GET /api/v1/prendas debe ser público");
+        MockServerHttpRequest prendasSlashReq = MockServerHttpRequest.get("/api/v1/prendas/").build();
+        assertTrue(filter.isPublicRequest(prendasSlashReq), "GET /api/v1/prendas/ debe ser público");
+        MockServerHttpRequest catalogoReq = MockServerHttpRequest.get("/api/v1/catalogo").build();
+        assertTrue(filter.isPublicRequest(catalogoReq), "GET /api/v1/catalogo debe ser público");
+        MockServerHttpRequest catalogoSlashReq = MockServerHttpRequest.get("/api/v1/catalogo/").build();
+        assertTrue(filter.isPublicRequest(catalogoSlashReq), "GET /api/v1/catalogo/ debe ser público");
 
         // Rutas privadas de donaciones y segunda mano
         String[] privatePaths = {

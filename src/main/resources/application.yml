@@ -137,7 +137,7 @@ spring:
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
           predicates:
-            - Path=/api/v1/catalogo/**, /api/v1/prendas/**, /api/v1/catalog/**, /api/v1/items/**
+            - Path=/api/v1/catalogo, /api/v1/catalogo/**, /api/v1/prendas, /api/v1/prendas/**, /api/v1/catalog, /api/v1/catalog/**, /api/v1/items, /api/v1/items/**
 
         # ms-geolocalizacion: Coordenadas y Mapa de Tiendas (Puerto 8240)
         - id: ms-geolocalizacion
