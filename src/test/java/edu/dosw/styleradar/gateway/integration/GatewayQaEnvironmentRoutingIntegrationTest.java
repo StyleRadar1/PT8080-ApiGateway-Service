@@ -76,6 +76,12 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
 
         assertTrue(routeUriMap.containsKey("ms-inventario"));
         assertTrue(routeUriMap.get("ms-inventario").getHost().contains("styleradar-inventario-qa.azurewebsites.net"));
+
+        assertTrue(routeUriMap.containsKey("ms-chat"));
+        assertTrue(routeUriMap.get("ms-chat").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
+
+        assertTrue(routeUriMap.containsKey("ms-usuarios"));
+        assertTrue(routeUriMap.get("ms-usuarios").getHost().contains("styleradar-qa-app.azurewebsites.net"));
     }
 
     @Test
@@ -91,5 +97,7 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertEquals("styleradar-donaciones-qa-jmunar.azurewebsites.net", routeUriMap.get("ms-donaciones-swagger").getHost());
         assertEquals("styleradar-auth-qa.azurewebsites.net", routeUriMap.get("ms-auth-swagger").getHost());
         assertEquals("styleradar-notificaciones-qa.azurewebsites.net", routeUriMap.get("ms-notificaciones-swagger").getHost());
+        assertEquals("styleradar-qa-app.azurewebsites.net", routeUriMap.get("ms-usuarios-swagger").getHost());
+        assertEquals("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net", routeUriMap.get("ms-chat-swagger").getHost());
     }
 }

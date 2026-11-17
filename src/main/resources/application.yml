@@ -73,6 +73,22 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
+        # Swagger Usuarios (transforma /v3/api-docs/usuarios -> /v3/api-docs en :8120)
+        - id: ms-usuarios-swagger
+          uri: ${USUARIOS_SERVICE_URL:http://localhost:8120}
+          predicates:
+            - Path=/v3/api-docs/usuarios
+          filters:
+            - SetPath=/v3/api-docs
+
+        # Swagger Chat (transforma /v3/api-docs/chat -> /v3/api-docs en :8320)
+        - id: ms-chat-swagger
+          uri: ${CHAT_SERVICE_URL:http://localhost:8320}
+          predicates:
+            - Path=/v3/api-docs/chat
+          filters:
+            - SetPath=/v3/api-docs
+
         # ==============================================================
         # 2. Rutas de Microservicios de Negocio (Matriz Oficial de Puertos)
         # ==============================================================
@@ -208,6 +224,10 @@ springdoc:
         url: "/v3/api-docs/tiendas"
       - name: "ms-notificaciones (:8300)"
         url: "/v3/api-docs/notificaciones"
+      - name: "ms-usuarios (:8120)"
+        url: "/v3/api-docs/usuarios"
+      - name: "ms-chat (:8320)"
+        url: "/v3/api-docs/chat"
 
 # Seguridad JWT Perimetral (inyección limpia por variable de entorno, sin clave quemada)
 security:

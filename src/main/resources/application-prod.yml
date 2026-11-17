@@ -48,6 +48,20 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
+        - id: ms-usuarios-swagger
+          uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
+          predicates:
+            - Path=/v3/api-docs/usuarios
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: ms-chat-swagger
+          uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
+          predicates:
+            - Path=/v3/api-docs/chat
+          filters:
+            - SetPath=/v3/api-docs
+
         # Paquete 1: Identidad
         - id: ms-auth
           uri: ${AUTH_SERVICE_URL:https://styleradar-auth-prod.azurewebsites.net}
@@ -92,7 +106,7 @@ spring:
             - Path=/api/v1/notificaciones/**
 
         - id: ms-chat
-          uri: ${CHAT_SERVICE_URL:https://styleradar-chat-prod.azurewebsites.net}
+          uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
             - Path=/api/v1/conversaciones/**, /api/v1/chat/**
 
