@@ -72,10 +72,10 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertTrue(routeUriMap.get("ms-notificaciones").getHost().contains("styleradar-notificaciones-qa.azurewebsites.net"));
 
         assertTrue(routeUriMap.containsKey("ms-item-catalogo"));
-        assertTrue(routeUriMap.get("ms-item-catalogo").getHost().contains("styleradar-catalogo-qa.azurewebsites.net"));
+        assertTrue(routeUriMap.get("ms-item-catalogo").getHost().contains("rst-itemcatalog-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io"));
 
         assertTrue(routeUriMap.containsKey("ms-inventario"));
-        assertTrue(routeUriMap.get("ms-inventario").getHost().contains("styleradar-inventario-qa.azurewebsites.net"));
+        assertTrue(routeUriMap.get("ms-inventario").getHost().contains("rst-inventory-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io"));
 
         assertTrue(routeUriMap.containsKey("ms-chat"));
         assertTrue(routeUriMap.get("ms-chat").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
