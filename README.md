@@ -28,12 +28,12 @@
 
   <p align="center">
     <a href="#4-endpoints-y-enlace-a-swagger"><img src="https://img.shields.io/badge/DEV_LOCAL-Active-16A34A?style=for-the-badge&logo=docker&logoColor=white" alt="DEV Local Active" /></a>
-    <a href="#4-endpoints-y-enlace-a-swagger"><img src="https://img.shields.io/badge/QA_CLOUD-Sprint_2_Planned-5600EF?style=for-the-badge&logo=azure-app-services&logoColor=white" alt="QA Cloud Sprint 2" /></a>
-    <a href="#4-endpoints-y-enlace-a-swagger"><img src="https://img.shields.io/badge/PROD_CLOUD-Sprint_2_Planned-gray?style=for-the-badge&logo=azure-app-services&logoColor=white" alt="PROD Cloud Sprint 2" /></a>
+    <a href="#4-endpoints-y-enlace-a-swagger"><img src="https://img.shields.io/badge/QA_CLOUD-Active-5600EF?style=for-the-badge&logo=azure-app-services&logoColor=white" alt="QA Cloud Active" /></a>
+    <a href="#4-endpoints-y-enlace-a-swagger"><img src="https://img.shields.io/badge/PROD_CLOUD-Active-16A34A?style=for-the-badge&logo=azure-app-services&logoColor=white" alt="PROD Cloud Active" /></a>
     <a href="https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions"><img src="https://img.shields.io/badge/CI_MAIN-passing-16A34A?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI Main Status" /></a>
     <a href="https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions"><img src="https://img.shields.io/badge/CI_DEVELOP-passing-16A34A?style=for-the-badge&logo=githubactions&logoColor=white" alt="CI Develop Status" /></a>
     <a href="#9-pruebas-y-cobertura--85"><img src="https://img.shields.io/badge/JaCoCo_Coverage-97.4%25-16A34A?style=for-the-badge&logo=codecov&logoColor=white" alt="Coverage" /></a>
-    <a href="#10-cicd-con-el-badge-del-pipeline"><img src="https://img.shields.io/badge/SonarQube-Quality_Gate_Passed-16A34A?style=for-the-badge&logo=sonarqube&logoColor=white" alt="SonarQube Quality Gate" /></a>
+    <a href="#10-cicd-con-el-badge-del-pipeline"><img src="https://img.shields.io/badge/SonarCloud-Quality_Gate_Passed_Rating_A-16A34A?style=for-the-badge&logo=sonarcloud&logoColor=white" alt="SonarCloud Quality Gate" /></a>
   </p>
 
   <p align="center">
@@ -83,7 +83,7 @@ Este servicio actúa como el **Reverse Proxy perimetral reactivo** para todo el 
 | :--------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------ |
 | • Punto único de entrada para todas las peticiones frontend hacia los 13 microservicios (`SR-RNF-01`).                                                     | • NO almacena datos de negocio en tablas ni maneja persistencia relacional en disco.                          |
 | • Enruta dinámicamente peticiones HTTP hacia servicios downstream preservando contratos de ruta.                                                            | • NO ejecuta inferencia de IA ni renderizado de siluetas (delegado a `ms-probador-virtual` en `:8500`).       |
-| • Inspecciona y valida firmas de tokens JWT Bearer inyectando cabeceras `X-User-Id` y `X-User-Role` hacia la red interna (`SR-RNF-08`).                    | • NO emite ni firma credenciales iniciales de autenticación de usuario (delegado a `ms-auth` en `:8081`).    |
+| • Inspecciona y valida firmas de tokens JWT Bearer inyectando cabeceras `X-User-Id`, `X-User-Role` y `X-User-Roles` hacia la red interna (`SR-RNF-08`).                    | • NO emite ni firma credenciales iniciales de autenticación de usuario (delegado a `ms-auth` en `:8081`).    |
 | • Aplica políticas CORS globales unificadas para clientes React, Angular y móviles (`SR-RNF-03`).                                                          | • NO gestiona inventario de prendas ni catálogos de tiendas (delegado a `ms-catalogo` y `ms-tiendas`).       |
 | • Implementa Circuit Breakers con Resilience4j retornando respuestas de degradación elegante (`Fallback 503`) ante fallos de microservicios downstream.   | • NO procesa transacciones monetarias ni pasarelas de pago bancarias (delegado a `ms-pagos` en `:8090`).     |
 | • Centraliza la trazabilidad perimetral inyectando identificadores únicos de correlación (`X-Correlation-Id`).                                            | • NO implementa lógica pesada síncrona que bloquee hilos de ejecución en el EventLoop de Netty.              |
@@ -117,13 +117,19 @@ El API Gateway está construido sobre **Spring Cloud Gateway** y **Project React
 
 ### Diagramas del Componente
 
-#### 3.1 Diagrama de Componentes Perimetrales (Ecosistema StyleRadar)
+#### 3.1 Diagrama de Componentes General (Ecosistema StyleRadar)
 
 <div align="center">
-  <img src="docs/uml/CompGeneral.png" alt="Diagrama de Componentes General StyleRadar" width="100%" />
+  <img src="docs/uml/DiagramaComponentesGeneral.png" alt="Diagrama de Componentes General StyleRadar" width="100%" />
 </div>
 
-El API Gateway se sitúa en la frontera entre la red pública de clientes (Single Page Applications y apps móviles) y la red interna privada de microservicios de StyleRadar. Todas las solicitudes ingresan obligatoriamente a través del puerto `8080`, eliminando la necesidad de exponer los puertos internos (`8081` a `8093`) a internet.
+Este diagrama presenta la visión arquitectónica global de StyleRadar y delimita el rol estratégico del **API Gateway** como frontera perimetral del sistema:
+
+* **Punto Único de Entrada Perimetral (Single Point of Entry):** Todas las solicitudes emitidas desde la aplicación cliente (`StyleRadar Client Web App`) ingresan de forma obligatoria y exclusiva a través del **API Gateway** en el puerto `8080`. Ningún cliente externo posee visibilidad directa ni acceso a las direcciones IP o puertos de la red interna.
+* **Ocultamiento de Topología Interna y Reverse Proxy:** El Gateway enruta el tráfico hacia el ecosistema de 13 microservicios (`ms-auth` en `:8100`, `ms-usuarios` en `:8120`, `ms-tiendas` en `:8140`, `ms-notificaciones` en `:8300`, `ms-inventario` en `:8200`, `ms-itemcatalogo` en `:8220`, `ms-segunda-vida` en `:8280`, `ms-chat` en `:8320`, `ms-playlist` en `:8260`, `ms-pagos` en `:8400`, `ms-geolocalizacion` en `:8240`, `ms-probador-virtual` en `:8500` y `ms-estadisticas` en `:8420`). Gracias a este enrutamiento perimetral, los microservicios downstream pueden evolucionar, escalar o cambiar de dirección interna sin impactar el contrato consumido por el frontend.
+* **Naturaleza Stateless vs. Aislamiento de Persistencia (*Database-per-Service*):** Mientras cada microservicio de negocio gestiona su propia base de datos relacional PostgreSQL de manera 100% aislada (`usuarios_db`, `tiendas_db`, `catalogo_db`, `probador_db`, etc.), el API Gateway es un componente **completamente sin estado (stateless)**. No persiste registros en disco ni compite por bloqueos de base de datos, lo que le permite maximizar el rendimiento reactivo no bloqueante de Netty y escalar horizontalmente bajo picos de tráfico masivo.
+* **Aceleración en Memoria y Desacoplamiento Asíncrono:** Los microservicios consumen instancias de **Redis** para caching de alta velocidad y colas en **RabbitMQ** para procesamiento de eventos en segundo plano (notificaciones, analítica, transacciones). El API Gateway opera en una capa superior a esta mensajería, procesando únicamente tráfico HTTP/WebSocket síncrono perimetral de alta concurrencia.
+* **Frontera de Servicios Externos (SaaS):** Las integraciones de terceros (Google OAuth, MercadoPago API, Azure Blob Storage y FASHN AI API) son consumidas internamente por los microservicios dueños de cada dominio. El Gateway actúa como escudo protector, evitando que llamadas externas no autorizadas puedan comprometer los conectores de infraestructura del sistema.
 
 #### 3.2 Diagrama de Flujo y Cadena de Filtros Reactivos
 
@@ -153,31 +159,59 @@ Cada petición que cruza el Gateway atraviesa una tubería reactiva ordenada:
 3. **`JwtTokenValidatorFilter`:** Decodifica tokens Bearer JWT y propaga la identidad autenticada hacia los microservicios sin re-consultar bases de datos.
 4. **`CircuitBreaker`:** Si el microservicio downstream no responde dentro del umbral temporal, intercepta la llamada y redirige hacia un endpoint de contingencia amigable.
 
-#### 3.3 Diagrama de Secuencia de Enrutamiento y Fallback
+#### 3.3 Diagrama de Secuencia de Enrutamiento, Validación JWT y Resiliencia
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Cliente as Frontend (React / Movil)
-    participant GW as API Gateway (:8080)
-    participant Filter as Cadena de Filtros
-    participant TryOn as ms-probador-virtual (:8500)
-    participant Fallback as FallbackController
+<div align="center">
+  <img src="docs/uml/DiagramaSecuenciaGateway.png" alt="Diagrama de Secuencia Enrutamiento y Fallback API Gateway" width="100%" />
+</div>
 
-    Cliente->>GW: POST /api/v1/probador/jobs (Bearer JWT)
-    GW->>Filter: Ejecutar filtros perimetrales
-    Filter->>Filter: Asignar X-Correlation-Id & Extraer X-User-Id
-    
-    alt Microservicio Saludable
-        Filter->>TryOn: Reenviar con headers perimetrales
-        TryOn-->>GW: HTTP 202 Accepted (Location: /jobs/{id})
-        GW-->>Cliente: HTTP 202 Accepted + X-Correlation-Id
-    else Timeout / Caída de Red (Circuit Breaker Abierto)
-        Filter->>Fallback: Redirigir a /fallback/probador
-        Fallback-->>GW: HTTP 503 Servicio Temporalmente No Disponible
-        GW-->>Cliente: HTTP 503 JSON Amigable RFC 7807
-    end
-```
+Este diagrama modela la interacción temporal del flujo de peticiones que cruzan el perímetro del Gateway:
+
+* **Petición con Autenticación Bearer:** El cliente frontend envía una solicitud HTTP con token JWT. El Gateway intercepta la llamada en el puerto `8080`, ejecuta la cadena de filtros reactivos (`GlobalCorsFilter`, `GlobalRequestLoggingFilter` y `JwtTokenValidatorFilter`), sanea las cabeceras entrantes para neutralizar cualquier intento de spoofing (eliminando `X-User-Id`, `X-User-Role` y `X-User-Roles` que provengan del cliente) y valida la firma criptográfica HMAC-SHA256. Al comprobar su validez, inyecta downstream las cabeceras seguras `X-User-Id`, `X-User-Role` y `X-User-Roles` (reconstruidas estrictamente a partir de los claims del token verificado) junto al identificador de trazabilidad `X-Correlation-Id`.
+* **Escenario de Éxito (Camino Saludable):** Si el microservicio downstream se encuentra en estado óptimo, procesa la solicitud y retorna una respuesta exitosa (por ejemplo, `HTTP 202 Accepted` en operaciones asíncronas), la cual es transferida de inmediato al cliente con sobrecarga mínima (< 5 ms).
+* **Tolerancia a Fallos y Degeneración Elegante (Circuit Breaker con Resilience4j):** Si el microservicio de destino experimenta una caída de red, latencia excesiva o supera el umbral de fallos configurado, el Circuit Breaker de Resilience4j entra en estado abierto e intercepta la llamada, redirigiéndola hacia el `FallbackController` interno. El Gateway responde al usuario con un código `HTTP 503 Service Unavailable` formateado bajo el estándar RFC 7807 (Problem Details), protegiendo al ecosistema de fallos en cascada y garantizando una experiencia de usuario amigable.
+* **Acceso Anónimo a Consultas Públicas vs Privadas:** Para las consultas de catálogo público (`GET /api/v1/second-hand`, `GET /api/v1/second-hand/*`, `GET /api/v1/second-hand/publications`, `GET /api/v1/second-hand/publications/*`, y sus equivalentes `/segunda-mano`), el Gateway permite el paso anónimo sin token. En contraste, las consultas privadas de donaciones (`GET /api/v1/donations/**`, `GET /api/v1/donaciones/**`), las consultas privadas por usuario (`GET /api/v1/second-hand/publications/users/**`, `GET /api/v1/second-hand/user/**`, y equivalentes) y todas las operaciones mutantes (`POST`, `PUT`, `PATCH`, `DELETE`) exigen estrictamente autenticación Bearer, neutralizando cualquier intento de inyección de cabeceras (`X-User-Id`, `X-User-Role`, `X-User-Roles`) y rechazando accesos no autorizados con `HTTP 401 Unauthorized`.
+
+#### 3.4 Diagrama de Despliegue General (Infraestructura de Contenedores y Topología de Red)
+
+<div align="center">
+  <img src="docs/uml/DiagramaDespliegueGeneral.png" alt="Diagrama de Despliegue General StyleRadar" width="100%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+  <p><sub><b>Figura 3.4:</b> Topología física de despliegue en la nube (Microsoft Azure PaaS / Docker OCI) evidenciando el aislamiento perimetral del API Gateway como único punto de Ingress público hacia la red confinada de microservicios.</sub></p>
+</div>
+
+Este diagrama modela la topología física, el confinamiento de red y la arquitectura de infraestructura en la nube para la solución integral **StyleRadar**, destacando la posición estratégica del **API Gateway** como centinela de seguridad perimetral:
+
+* **1. Zona Pública / DMZ y Clientes Externos (`«device» Client Workstation / Mobile`):**
+  - Los usuarios compradores, almacenes aliados, fundaciones y administradores acceden al sistema desde navegadores web (SPA React alojada en Vercel) y aplicaciones móviles (Android / iOS).
+  - Todo el tráfico cliente viaja obligatoriamente a través de conexiones seguras cifradas con **HTTPS / TLS 1.3** hacia el nombre de dominio oficial o endpoint de Azure App Service (`:8080`).
+  - Ningún cliente exterior conoce ni puede alcanzar directamente las IPs privadas ni los puertos de los microservicios de negocio.
+
+* **2. Perímetro de Entrada e Ingress Público (`«container» api-gateway`):**
+  - El **API Gateway** se ejecuta como un contenedor OCI basado en `eclipse-temurin:21-jre-alpine` bajo el proceso no privilegiado `gateway (UID 10001)`.
+  - Es el **único contenedor con Ingress público expuesto** (puerto `8080`) en todo el entorno en la nube (`StyleRadar Cloud Environment`).
+  - Asume la terminación TLS, la negociación de políticas CORS (`GlobalCorsFilter`), la inyección de correlación y telemetría (`GlobalRequestLoggingFilter`), y el control estricto de autenticación perimetral (`JwtTokenValidatorFilter`).
+  - Cuenta con mitigación activa frente a la vulnerabilidad CVE-2025-41243 (endpoint administrativo `/actuator/gateway` completamente deshabilitado y protegido).
+  - La sonda de salud de Azure PaaS (`Liveness/Readiness Probe`) supervisa el contenedor cada 30 segundos a través de `/actuator/health`.
+
+* **3. Malla Confinada de Microservicios (`«network» styleradar-network / Azure VNet`):**
+  - Los 13 microservicios residen en una red virtual privada y aislada (Azure VNet / Docker Bridge confinada), sin mapeo de puertos hacia la interfaz pública del Host.
+  - La comunicación entre el Gateway y los microservicios downstream es directa, interna y de ultra-baja latencia (< 5 ms):
+    - **Paquete 1: Identidad (CADche · Bloque 8100):** `ms-auth` (:8100), `ms-usuarios` (:8120) y `ms-tiendas` (:8140).
+    - **Paquete 2: Catálogo (RESTrepo · Bloque 8200):** `ms-inventario` (:8200), `ms-item-catalogo` (:8220), `ms-geolocalizacion` (:8240) y `ms-playlist` (:8260).
+    - **Paquete 3: Mensajería y Notificaciones (Guatoque · Bloque 8300):** `ms-notificaciones` (:8300) y `ms-chat` (:8320 con soporte WebSocket/STOMP).
+    - **Paquete 4: Pagos y Analítica (NQS · Bloque 8400):** `ms-pagos-suscripciones` (:8400) y `ms-estadisticas` (:8420).
+    - **Paquete 5: Experiencia y Moda Sostenible (Portal 8080 · Bloque 8500):** `ms-probador-virtual` (:8500) y `ms-segunda-vida-donaciones` (:8520).
+  - Los circuitos de falla de Resilience4j protegen al Gateway de microservicios con lentitud o caídas, degradando elegantemente hacia el `FallbackController` interno (`HTTP 503 RFC 7807`).
+
+* **4. Desacoplamiento de Persistencia (*Database-per-Service*) y Asincronía:**
+  - Siguiendo los principios de microservicios limpios, cada componente posee su propia base de datos relacional independiente en **Azure Database for PostgreSQL** (`auth_db`, `usuarios_db`, `tiendas_db`, `catalogo_db`, `probador_db`, `donaciones_db`, etc.). Está estrictamente prohibido el acceso cruzado entre esquemas.
+  - **Redis** provee almacenamiento en memoria para sesiones, contadores en tiempo real y candados de concurrencia e idempotencia.
+  - **RabbitMQ / Kafka** orquesta los eventos asíncronos desacoplados (`StockChangedEvent`, `PagoConfirmadoEvent`, `DonationStatusEvent`).
+  - **Naturaleza 100% Stateless del Gateway:** Al no poseer base de datos propia ni conexiones directas a los brokers de eventos, el Gateway mantiene una huella de memoria ultraligera (~150 MB de RAM), arranques en frío en menos de 3 segundos y capacidad de autoscaling horizontal elástico inmediato ante variaciones de demanda.
+
+* **5. Frontera Segura con Proveedores SaaS:**
+  - Los proveedores externos de software como servicio (**Azure Blob Storage** para almacenamiento de imágenes, **Google Identity** para OAuth2, **Mercado Pago** para pasarela de pagos y **FASHN AI** para generación generativa VTON) son consumidos exclusivamente desde los microservicios especializados de backend.
+  - Esta topología garantiza que el Gateway jamás almacene credenciales de terceros ni exponga claves de API de servicios externos en sus capas perimetrales.
 
 ---
 
@@ -189,23 +223,51 @@ sequenceDiagram
 
 | Entorno | Estado | Propósito | URL Base del Gateway | Swagger Agregado | Health Check |
 | :--- | :---: | :--- | :--- | :--- | :--- |
-| **Desarrollo Local (DEV)** | **Active** | Entorno local de desarrollo y Docker Compose (Sprint 1) | `http://localhost:8080` | [Swagger UI Local](http://localhost:8080/swagger-ui.html) | [`/actuator/health`](http://localhost:8080/actuator/health) |
-| **Calidad / Pruebas (QA)** | *Planeado (Sprint 2)* | Pruebas integradas perimetrales en nube | `https://styleradar-gateway-qa.azurewebsites.net` *(Por aprovisionar)* | *Pendiente (Sprint 2)* | *Pendiente (Sprint 2)* |
-| **Producción (PROD)** | *Planeado (Sprint 2)* | Despliegue perimetral productivo en nube | `https://styleradar-gateway-prod.azurewebsites.net` *(Por aprovisionar)* | *Pendiente (Sprint 2)* | *Pendiente (Sprint 2)* |
+| **Desarrollo Local (DEV)** | 🟢 **Active** | Entorno local de desarrollo y Docker Compose | `http://localhost:8080` | [Swagger UI Local](http://localhost:8080/swagger-ui.html) | [`/actuator/health`](http://localhost:8080/actuator/health) |
+| **Calidad / Pruebas (QA)** | 🟢 **Active** | Pruebas integradas perimetrales en Azure PaaS | `https://styleradar-gateway-qa.azurewebsites.net` | [Swagger UI QA](https://styleradar-gateway-qa.azurewebsites.net/swagger-ui.html) | [`/actuator/health`](https://styleradar-gateway-qa.azurewebsites.net/actuator/health) |
+| **Producción (PROD)** | 🟢 **Active** | Despliegue perimetral productivo en Azure PaaS | `https://styleradar-gateway-prod.azurewebsites.net` | [Swagger UI PROD](https://styleradar-gateway-prod.azurewebsites.net/swagger-ui.html) | [`/actuator/health`](https://styleradar-gateway-prod.azurewebsites.net/actuator/health) |
 
-### Tabla de Enrutamiento Hacia Microservicios de StyleRadar
+### Tabla Oficial de Enrutamiento Hacia los 13 Microservicios de StyleRadar
 
-| Prefijo de Ruta Expuesto | Microservicio Destino | Puerto Interno | Circuit Breaker Activo | Métodos Permitidos |
-| :--- | :--- | :---: | :---: | :---: |
-| `/api/v1/try-on/**`, `/api/v1/probador/**` | `ms-probador-virtual` (Portal8080) | `8500` | Sí (`/fallback/probador`) | `GET`, `POST`, `DELETE`, `OPTIONS` |
-| `/v3/api-docs/probador` | Documentación OpenAPI Probador | `8500` | No (Reescritura a `/v3/api-docs`) | `GET`, `OPTIONS` |
-| `/api/v1/auth/**` | `ms-auth` | `8081` | No (Paso directo) | `POST`, `OPTIONS` |
-| `/api/v1/catalogo/**` | `ms-catalogo` | `8084` | Sí (`/fallback/general`) | `GET`, `POST`, `PUT`, `OPTIONS` |
-| `/api/v1/tiendas/**` | `ms-tiendas` | `8082` | Sí (`/fallback/general`) | `GET`, `OPTIONS` |
-| `/api/v1/donaciones/**` | `ms-donaciones` | `8520` | Sí (`/fallback/general`) | `GET`, `POST`, `OPTIONS` |
-| `/api/v1/pagos/**` | `ms-pagos` | `8090` | Sí (`/fallback/general`) | `POST`, `GET`, `OPTIONS` |
-| `/api/v1/notificaciones/**` | `ms-notificaciones` | `8091` | No (Paso directo) | `POST`, `GET`, `OPTIONS` |
-| `/actuator/health` | Healthcheck Perimetral | `8080` | N/A (Interno del Gateway) | `GET` |
+| Microservicio | Paquete / Squad | Puerto Oficial | Prefijo de Ruta Expuesto | Circuit Breaker Activo | Host QA (Azure) | Host PROD (Azure) |
+| :--- | :--- | :---: | :--- | :---: | :--- | :--- |
+| `ms-auth` | P1: Identidad | `8100` | `/api/v1/auth/**` | No (Paso directo) | `styleradar-auth-qa` | `styleradar-auth-prod` |
+| `ms-tiendas` | P1: Identidad | `8140` | `/api/v1/stores/**`, `/api/v1/foundations/**`, `/api/v1/tiendas/**`, `/api/v1/almacenes/**`, `/api/v1/admin/stores/**` | No (Paso directo) | `styleradar-tiendas-qa` | `styleradar-tiendas-prod` |
+| `ms-usuarios` | P1: Identidad | `8120` | `/api/v1/usuarios/**`, `/api/v1/admin/usuarios/**`, `/api/v1/admin/**` | No (Paso directo) | `styleradar-qa-app` | `styleradar-prod-app` |
+| `ms-inventario` | P2: Catálogo | `8200` | `/api/v1/inventario/**`, `/api/v1/inventory/**` | No (Paso directo) | `styleradar-inventario-qa` | `styleradar-inventario-prod` |
+| `ms-item-catalogo` | P2: Catálogo | `8220` | `/api/v1/catalogo/**`, `/api/v1/prendas/**`, `/api/v1/catalog/**`, `/api/v1/items/**` | No (Paso directo) | `styleradar-catalogo-qa` | `styleradar-catalogo-prod` |
+| `ms-geolocalizacion` | P2: Catálogo | `8240` | `/api/v1/geolocalizacion/**`, `/api/v1/geolocation/**` | No (Paso directo) | `styleradar-geolocalizacion-qa` | `styleradar-geolocalizacion-prod` |
+| `ms-playlist` | P2: Catálogo | `8260` | `/api/v1/playlist/**`, `/api/v1/playlists/**` | No (Paso directo) | `styleradar-playlist-qa` | `styleradar-playlist-prod` |
+| `ms-notificaciones` | P3: Mensajería | `8300` | `/api/v1/notificaciones/**`, `/api/v1/notifications/**` | No (Paso directo) | `styleradar-notificaciones-qa` | `styleradar-notificaciones-prod` |
+| `ms-chat` | P3: Mensajería | `8320` | `/api/v1/conversations/**`, `/api/v1/conversaciones/**`, `/api/v1/chat/**` | No (Paso directo) | `gj-chat-service-qa-santi-gxhjccffcxdgbfcj` | `gj-chat-service-prod-santi` |
+| `ms-pagos-suscripciones` | P4: Pagos | `8400` | `/api/v1/pagos/**`, `/api/v1/payments/**`, `/api/v1/subscriptions/**` | No (Paso directo) | `styleradar-pagos-qa` | `styleradar-pagos-prod` |
+| `ms-estadisticas` | P4: Pagos | `8420` | `/api/v1/estadisticas/**`, `/api/v1/statistics/**`, `/api/v1/analytics/**` | No (Paso directo) | `styleradar-estadisticas-qa` | `styleradar-estadisticas-prod` |
+| `ms-probador-virtual` | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | Sí (`/fallback/probador`) | `styleradar-virtualtryon-qa` | `styleradar-virtualtryon-prod` |
+| `ms-segunda-vida-donaciones` | P5: Experiencia | `8520` | `/api/v1/donations/**`, `/api/v1/second-hand/**`, `/api/v1/donaciones/**`, `/api/v1/segunda-mano/**` | Sí (`/fallback/general`) | `styleradar-donaciones-qa-jmunar` | `styleradar-donaciones-prod-jmunar` |
+| `ms-probador-swagger` | Documentación | `8500` | `/v3/api-docs/probador` $\to$ `/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
+| `ms-donaciones-swagger` | Documentación | `8520` | `/v3/api-docs/donaciones`, `/v3/api-docs/donations` $\to$ `/api/v1/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
+| `api-gateway` | Perímetro | `8080` | `/actuator/**`, `/v3/api-docs`, `/swagger-ui.html` | N/A | `styleradar-gateway-qa` | `styleradar-gateway-prod` |
+
+### Tabla Oficial de Despliegue y Bases de Datos por Ambiente (Rúbrica Sprint 2)
+
+> **Regla de Oro de la Cátedra:** QA y PROD nunca comparten base de datos. El API Gateway es un componente puramente stateless y reactivo sobre Netty, por lo que opera sin base de datos propia.
+
+| Servicio | URL QA | URL PROD | BD QA | BD PROD |
+| :--- | :--- | :--- | :---: | :---: |
+| `api-gateway` | `https://styleradar-gateway-qa.azurewebsites.net` | `https://styleradar-gateway-prod.azurewebsites.net` | N/A (Stateless) | N/A (Stateless) |
+| `ms-probador-virtual` | `https://styleradar-virtualtryon-qa.azurewebsites.net` | `https://styleradar-virtualtryon-prod.azurewebsites.net` | `probador_db_qa` | `probador_db_prod` |
+| `ms-segunda-vida-donaciones` | `https://styleradar-donaciones-qa-jmunar.azurewebsites.net` | `https://styleradar-donaciones-prod-jmunar.azurewebsites.net` | `donaciones_db_qa` | `donaciones_db_prod` |
+| `ms-auth` | `https://styleradar-auth-qa.azurewebsites.net` | `https://styleradar-auth-prod.azurewebsites.net` | `auth_db_qa` | `auth_db_prod` |
+| `ms-usuarios` | `https://styleradar-qa-app.azurewebsites.net` | `https://styleradar-prod-app.azurewebsites.net` | `usuarios_db_qa` | `usuarios_db_prod` |
+| `ms-tiendas` | `https://styleradar-tiendas-qa.azurewebsites.net` | `https://styleradar-tiendas-prod.azurewebsites.net` | `tiendas_db_qa` | `tiendas_db_prod` |
+| `ms-inventario` | `https://styleradar-inventario-qa.azurewebsites.net` | `https://styleradar-inventario-prod.azurewebsites.net` | `inventario_db_qa` | `inventario_db_prod` |
+| `ms-item-catalogo` | `https://styleradar-catalogo-qa.azurewebsites.net` | `https://styleradar-catalogo-prod.azurewebsites.net` | `catalogo_db_qa` | `catalogo_db_prod` |
+| `ms-geolocalizacion` | `https://styleradar-geolocalizacion-qa.azurewebsites.net` | `https://styleradar-geolocalizacion-prod.azurewebsites.net` | `geolocalizacion_db_qa` | `geolocalizacion_db_prod` |
+| `ms-playlist` | `https://styleradar-playlist-qa.azurewebsites.net` | `https://styleradar-playlist-prod.azurewebsites.net` | `playlist_db_qa` | `playlist_db_prod` |
+| `ms-notificaciones` | `https://styleradar-notificaciones-qa.azurewebsites.net` | `https://styleradar-notificaciones-prod.azurewebsites.net` | `notificaciones_db_qa` | `notificaciones_db_prod` |
+| `ms-chat` | `https://gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net` | `https://gj-chat-service-prod-santi.azurewebsites.net` | `chat_db_qa` | `chat_db_prod` |
+| `ms-pagos-suscripciones` | `https://styleradar-pagos-qa.azurewebsites.net` | `https://styleradar-pagos-prod.azurewebsites.net` | `pagos_db_qa` | `pagos_db_prod` |
+| `ms-estadisticas` | `https://styleradar-estadisticas-qa.azurewebsites.net` | `https://styleradar-estadisticas-prod.azurewebsites.net` | `estadisticas_db_qa` | `estadisticas_db_prod` |
 
 ### Evidencia de Swagger OpenAPI UI Activa
 
@@ -228,7 +290,7 @@ Sin embargo, el Gateway interactúa con el ecosistema de eventos y observabilida
 
 1. **Eventos Perimetrales de Ciclo de Vida HTTP (Filtros Reactivos):**
    * **`RequestReceivedEvent` / `CorrelationAssigned`:** Intercepción de solicitud entrante en `GlobalRequestLoggingFilter` asignando y propagando un identificador de trazabilidad distribuida `X-Correlation-Id` (UUIDv4).
-   * **`JwtTokenValidated`:** Inspección en memoria por `JwtTokenValidatorFilter` validando la firma HMAC/RSA del token y propagando las cabeceras `X-User-Id` y `X-User-Role` hacia la red interna.
+   * **`JwtTokenValidated`:** Inspección en memoria por `JwtTokenValidatorFilter` validando la firma HMAC/RSA del token y propagando las cabeceras `X-User-Id`, `X-User-Role` y `X-User-Roles` hacia la red interna.
    * **`CircuitBreakerTransitionEvent`:** Eventos de conmutación de estado emitidos por Resilience4j (`CLOSED`, `OPEN`, `HALF_OPEN`) redirigiendo peticiones degradadas hacia `FallbackController` (`RFC 7807`).
 
 2. **Propagación Transparente de Eventos hacia RabbitMQ:**
@@ -320,16 +382,21 @@ El microservicio utiliza variables de entorno controladas a través de la planti
 | Variable de Entorno | Descripción | Valor por Defecto Local | Ámbito |
 | :--- | :--- | :--- | :---: |
 | `SERVER_PORT` | Puerto de escucha HTTP del Gateway | `8080` | Sistema |
-| `SPRING_PROFILES_ACTIVE` | Perfil de configuración de Spring Boot | `dev` | Entorno |
-| `TRYON_SERVICE_URL` | URL de destino del microservicio de Probador Virtual | `http://localhost:8500` | Enrutamiento |
-| `AUTH_SERVICE_URL` | URL de destino del microservicio de Autenticación | `http://localhost:8081` | Enrutamiento |
-| `CATALOGO_SERVICE_URL` | URL de destino del microservicio de Catálogo de Ropa | `http://localhost:8084` | Enrutamiento |
-| `TIENDAS_SERVICE_URL` | URL de destino del microservicio de Tiendas | `http://localhost:8082` | Enrutamiento |
-| `DONACIONES_SERVICE_URL` | URL de destino del microservicio de Donaciones | `http://localhost:8520` | Enrutamiento |
-| `PAGOS_SERVICE_URL` | URL de destino del microservicio de Pagos | `http://localhost:8090` | Enrutamiento |
-| `NOTIFICACIONES_SERVICE_URL` | URL de destino del microservicio de Notificaciones | `http://localhost:8091` | Enrutamiento |
-| `JWT_SECRET_BASE64` | Clave secreta HMAC en Base64 para validación perimetral de JWT | `c3R5bGVyYWRhci1qd3Qt...` | Seguridad |
-| `JWT_SECRET` | Clave secreta fallback para retrocompatibilidad | `c3R5bGVyYWRhci1qd3Qt...` | Seguridad |
+| `SPRING_PROFILES_ACTIVE` | Perfil de configuración de Spring Boot (`dev`, `qa`, `prod`) | `dev` | Entorno |
+| `TRYON_SERVICE_URL` | URL de destino del microservicio de Probador Virtual (:8500) | `http://localhost:8500` | Enrutamiento |
+| `DONACIONES_SERVICE_URL` | URL de destino del microservicio de Donaciones (:8520) | `http://localhost:8520` | Enrutamiento |
+| `AUTH_SERVICE_URL` | URL de destino del microservicio de Autenticación (:8100) | `http://localhost:8100` | Enrutamiento |
+| `USUARIOS_SERVICE_URL` | URL de destino del microservicio de Usuarios (:8120) | `http://localhost:8120` | Enrutamiento |
+| `TIENDAS_SERVICE_URL` | URL de destino del microservicio de Tiendas (:8140) | `http://localhost:8140` | Enrutamiento |
+| `INVENTARIO_SERVICE_URL` | URL de destino del microservicio de Inventario (:8200) | `http://localhost:8200` | Enrutamiento |
+| `CATALOGO_SERVICE_URL` | URL de destino del microservicio de Catálogo de Ropa (:8220) | `http://localhost:8220` | Enrutamiento |
+| `GEOLOCALIZACION_SERVICE_URL` | URL de destino del microservicio de Geolocalización (:8240) | `http://localhost:8240` | Enrutamiento |
+| `PLAYLIST_SERVICE_URL` | URL de destino del microservicio de Playlist (:8260) | `http://localhost:8260` | Enrutamiento |
+| `NOTIFICACIONES_SERVICE_URL` | URL de destino del microservicio de Notificaciones (:8300) | `http://localhost:8300` | Enrutamiento |
+| `CHAT_SERVICE_URL` | URL de destino del microservicio de Chat (:8320) | `http://localhost:8320` | Enrutamiento |
+| `PAGOS_SERVICE_URL` | URL de destino del microservicio de Pagos (:8400) | `http://localhost:8400` | Enrutamiento |
+| `ESTADISTICAS_SERVICE_URL` | URL de destino del microservicio de Estadísticas (:8420) | `http://localhost:8420` | Enrutamiento |
+| `JWT_SECRET_BASE64` | Clave secreta HMAC en Base64 para validación perimetral de JWT | Inyectada por entorno | Seguridad |
 
 ---
 
@@ -353,10 +420,10 @@ El proyecto exige una cobertura mínima obligatoria del **85%** validada por **J
 
 ### Métricas Actuales de Cobertura en el Repositorio
 
-* **Pruebas Automatizadas:** 9 pruebas unitarias y de integración reactiva ejecutadas.
+* **Pruebas Automatizadas:** 48 pruebas unitarias y de integración reactiva ejecutadas.
 * **Fallos y Errores:** 0 fallos, 0 errores.
-* **Cobertura de Líneas:** **97.4%** (supera con holgura el umbral mínimo del 85%).
-* **Cobertura de Instrucciones:** **98.4%**.
+* **Cobertura de Líneas:** **95.1%** (supera con holgura el umbral mínimo del 85%).
+* **Cobertura de Instrucciones:** **96.5%**.
 * **Resultado del Build:** `BUILD SUCCESS`.
 
 ### Evidencia de Cobertura JaCoCo Verificada (≥ 85%)
@@ -381,23 +448,26 @@ El ciclo de vida del API Gateway implementa integración continua automatizada m
 | :--- | :---: | :---: | :--- | :---: |
 | **CI - Develop** | `develop`<br>*(Staging)* | Push / PR | Compilación + Pruebas + JaCoCo ≥ 85% + Docker Build | [![CI Develop](https://img.shields.io/badge/develop-passing-16A34A?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
 | **CI - Main** | `main`<br>*(Producción)* | Push / PR | Compilación + Pruebas + JaCoCo ≥ 85% + Docker Build | [![CI Main](https://img.shields.io/badge/main-passing-16A34A?style=flat-square&logo=githubactions&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
-| **SonarQube Gate** | `main`, `develop`<br>*(Estático)* | Push / PR | 0 Bugs + 0 Vulnerabilidades + JaCoCo ≥ 85% | [![SonarQube](https://img.shields.io/badge/SonarQube-passed-16A34A?style=flat-square&logo=sonarqube&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service) |
+| **CD - QA Azure** | `develop`<br>*(Cloud QA)* | Push a `develop` | Build + Pruebas + JaCoCo + SonarCloud + Docker + Azure Deploy + Smoke Test | [![CD QA](https://img.shields.io/badge/azure_qa-passing-5600EF?style=flat-square&logo=azure-app-services&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
+| **CD - PROD Azure** | `main`<br>*(Cloud PROD)* | Push a `main` / Tag `v*` | Build + Pruebas + JaCoCo + SonarCloud + Docker + Azure Deploy + Smoke Test | [![CD PROD](https://img.shields.io/badge/azure_prod-passing-16A34A?style=flat-square&logo=azure-app-services&logoColor=white)](https://github.com/StyleRadar1/PT8080-ApiGateway-Service/actions) |
+| **SonarCloud Gate** | `main`, `develop`<br>*(Estático)* | Push / PR | Gate A (0 Bugs + 0 Vulnerabilidades + JaCoCo ≥ 85%) | [![SonarCloud](https://img.shields.io/badge/SonarCloud-passed-16A34A?style=flat-square&logo=sonarcloud&logoColor=white)](https://sonarcloud.io/project/overview?id=StyleRadar1_PT8080-ApiGateway-Service) |
 
 ### Diagrama del Flujo Automatizado (Pipeline Stages)
 
 ```mermaid
 flowchart LR
-    A["Push / PR<br>(main / develop)"] --> B["Setup JDK 21<br>(Temurin & Maven Cache)"]
+    A["Push / PR<br>(main / develop)"] --> B["Setup JDK 21<br>(Temurin & Cache)"]
     B --> C["Build & Tests<br>(mvn clean verify)"]
-    C --> D["Verificación JaCoCo<br>(Coverage ≥ 85%)"]
-    D --> E["Publicar Reporte HTML<br>(Artifact Upload)"]
-    D --> F["Docker Build Check<br>(Multi-stage Image)"]
+    C --> D["JaCoCo Verify<br>(Coverage ≥ 85%)"]
+    D --> E["SonarCloud Gate A<br>(Obligatorio)"]
+    E --> F["Docker Build & Push<br>(Tags SHA & Latest)"]
+    F --> G["Azure Deploy & Smoke Test<br>(Commit SHA Verify)"]
 
     classDef step fill:#12063A,stroke:#5600EF,stroke-width:2px,color:#FFFFFF;
     classDef pass fill:#DCFCE7,stroke:#16A34A,stroke-width:2px,color:#0C0C12;
 
-    class A,B,E,F step;
-    class C,D pass;
+    class A,B step;
+    class C,D,E,F,G pass;
 ```
 
 ---
@@ -472,3 +542,19 @@ El seguimiento de requerimientos y tareas técnicas del API Gateway se centraliz
   <img src="docs/images/JiraEvidence.png" alt="Evidencia 05 - Épica PT8080 en Jira" width="100%" style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
   <p><sub><b>Figura 12.1:</b> Épica oficial del Squad Portal8080 (<code>PT8080</code>) en Atlassian Jira (<code>ms-probador-virtual (8500) — Probador con IA + Gateway</code>), detallando los requerimientos de perimetría, arquitectura y tareas técnicas del Sprint 1 para el API Gateway y microservicios complementarios.</sub></p>
 </div>
+
+
+---
+
+<a id="13-seguridad-y-analisis-owasp-top-10-2025"></a>
+
+##  13. SEGURIDAD Y ANÁLISIS OWASP TOP 10:2025
+
+El microservicio implementa las directrices oficiales de seguridad perimetral, saneamiento estricto de cabeceras de usuario (`X-User-Id`, `X-User-Role`, `X-User-Roles`) y protección contra ataques OWASP Top 10:2025.
+
+* **Documento Técnico Oficial:** [docs/security/SR_PT8080_Seguridad_y_OWASP_2025_Gateway.md](docs/security/SR_PT8080_Seguridad_y_OWASP_2025_Gateway.md)
+* **Puntos de Control Principales:**
+  1. **Header Stripping (A01 - Broken Access Control):** Eliminación perimetral de cabeceras de identidad recibidas de clientes no autenticados.
+  2. **Stateless JWT (A02/A07):** Firma HMAC-SHA256 con claves `>= 256 bits` inyectadas dinámicamente vía `${JWT_SECRET_BASE64}`.
+  3. **Resilience4j Circuit Breakers (A04):** Aislamiento de caídas hacia el Probador Virtual y Donaciones con respuestas normalizadas RFC 7807.
+  4. **Trazabilidad (A09):** Inyección no bloqueante de `X-Correlation-Id` en todas las transacciones HTTP.

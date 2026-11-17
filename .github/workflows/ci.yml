@@ -12,12 +12,16 @@ permissions:
 
 jobs:
   build-and-test:
-    name: Build, Test & JaCoCo Coverage
+    name: Build, Test, JaCoCo (>= 85%) & SonarCloud (Gate A)
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
@@ -32,6 +36,12 @@ jobs:
       - name: Compile, Test & Verify JaCoCo Quality Gate (>= 85%)
         run: ./mvnw clean verify -B
 
+      - name: Run SonarQube / SonarCloud Quality Gate Analysis (Gate A Obligatorio)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN || secrets.SONARCLOUD_TOKEN }}
+        run: ./mvnw -B sonar:sonar -Dsonar.qualitygate.wait=true -Dsonar.token="${{ secrets.SONAR_TOKEN || secrets.SONARCLOUD_TOKEN }}"
+
       - name: Upload JaCoCo HTML Coverage Report
         uses: actions/upload-artifact@v4
         if: always()
@@ -41,7 +51,7 @@ jobs:
           retention-days: 14
 
   docker-build-check:
-    name: Verify Docker Container Build
+    name: Verify Docker Container Build (with Commit SHA)
     needs: build-and-test
     runs-on: ubuntu-latest
 
@@ -58,5 +68,6 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
+          build-args: |
+            GIT_COMMIT_SHA=${{ github.sha }}
           tags: styleradar/pt8080-apigateway-service:latest
-
