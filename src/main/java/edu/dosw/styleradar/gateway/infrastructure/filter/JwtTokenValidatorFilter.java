@@ -64,9 +64,15 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/second-hand",
             "/api/v1/second-hand/",
             "/api/v1/second-hand/*",
+            "/api/v1/second-hand/publications",
+            "/api/v1/second-hand/publications/",
+            "/api/v1/second-hand/publications/*",
             "/api/v1/segunda-mano",
             "/api/v1/segunda-mano/",
             "/api/v1/segunda-mano/*",
+            "/api/v1/segunda-mano/publicaciones",
+            "/api/v1/segunda-mano/publicaciones/",
+            "/api/v1/segunda-mano/publicaciones/*",
             "/api/v1/stores",
             "/api/v1/stores/",
             "/api/v1/stores/*",
@@ -235,7 +241,11 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             return false;
         }
         // Exclusión de seguridad estricta: consultas privadas de donaciones y publicaciones por usuario nunca son anónimas
-        if (pathMatcher.match("/api/v1/second-hand/user/**", path)
+        if (pathMatcher.match("/api/v1/second-hand/publications/users/**", path)
+                || pathMatcher.match("/api/v1/second-hand/publications/user/**", path)
+                || pathMatcher.match("/api/v1/second-hand/user/**", path)
+                || pathMatcher.match("/api/v1/segunda-mano/publicaciones/usuarios/**", path)
+                || pathMatcher.match("/api/v1/segunda-mano/publicaciones/usuario/**", path)
                 || pathMatcher.match("/api/v1/segunda-mano/user/**", path)
                 || pathMatcher.match("/api/v1/donations/**", path)
                 || pathMatcher.match("/api/v1/donaciones/**", path)) {

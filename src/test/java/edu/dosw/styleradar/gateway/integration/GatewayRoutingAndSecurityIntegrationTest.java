@@ -197,6 +197,77 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 exchange.close();
             }
         });
+
+        // 7. Endpoint mock para catálogo de publicaciones (/api/v1/second-hand/publications)
+        mockHttpServer.createContext("/api/v1/second-hand/publications", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"endpoint\":\"/api/v1/second-hand/publications\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 8. Endpoint mock para detalle de publicación (/api/v1/second-hand/publications/pub-123)
+        mockHttpServer.createContext("/api/v1/second-hand/publications/pub-123", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"endpoint\":\"/api/v1/second-hand/publications/pub-123\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 9. Endpoint mock para publicaciones privadas por usuario (/api/v1/second-hand/publications/users/101)
+        mockHttpServer.createContext("/api/v1/second-hand/publications/users/101", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String userRoles = exchange.getRequestHeaders().getFirst("X-User-Roles");
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"endpoint\":\"/api/v1/second-hand/publications/users/101\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"receivedUserRoles\":\"" + (userRoles != null ? userRoles : "none") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
     }
 
     @AfterAll
@@ -278,6 +349,59 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
                 .jsonPath("$.status").isEqualTo("UP");
+    }
+
+    @Test
+    @DisplayName("Integración Consulta Pública Canónica: Consulta anónima GET /api/v1/second-hand/publications es permitida (200 OK)")
+    void shouldAllowAnonymousAccessToPublicPublicationsCatalog() {
+        webTestClient.get()
+                .uri("/api/v1/second-hand/publications")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.endpoint").isEqualTo("/api/v1/second-hand/publications")
+                .jsonPath("$.status").isEqualTo("UP");
+    }
+
+    @Test
+    @DisplayName("Integración Consulta Pública Canónica: Consulta anónima GET /api/v1/second-hand/publications/{id} es permitida (200 OK)")
+    void shouldAllowAnonymousAccessToPublicPublicationDetail() {
+        webTestClient.get()
+                .uri("/api/v1/second-hand/publications/pub-123")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.endpoint").isEqualTo("/api/v1/second-hand/publications/pub-123")
+                .jsonPath("$.status").isEqualTo("UP");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: Consulta anónima a publicaciones de usuario (/publications/users/{userId}) es rechazada con 401")
+    void shouldRejectAnonymousAccessToPrivateUserPublicationsWith401() {
+        webTestClient.get()
+                .uri("/api/v1/second-hand/publications/users/101")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("Unauthorized");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: Consulta a publicaciones de usuario con token válido es permitida")
+    void shouldAllowAuthenticatedAccessToPrivateUserPublications() {
+        String token = generateValidToken("user-propietario-101", "ROLE_CLIENTE");
+
+        webTestClient.get()
+                .uri("/api/v1/second-hand/publications/users/101")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.receivedUserId").isEqualTo("user-propietario-101");
     }
 
     @Test

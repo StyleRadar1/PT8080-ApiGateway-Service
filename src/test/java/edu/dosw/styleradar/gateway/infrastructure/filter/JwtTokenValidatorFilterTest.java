@@ -263,24 +263,37 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("Consulta Pública GET vs Rutas Privadas: Permite catálogo público (/second-hand) pero bloquea donaciones y consultas por usuario")
+    @DisplayName("Consulta Pública GET vs Rutas Privadas: Permite catálogo público (/second-hand, /publications) pero bloquea donaciones y consultas por usuario")
     void isPublicRequest_permiteCatalogoPublicoYBloqueaConsultasPrivadas() {
-        // Endpoints públicos del contrato
+        // Endpoints públicos del contrato estándar y canónico de Munar
         MockServerHttpRequest getSecondHand = MockServerHttpRequest.get("/api/v1/second-hand").build();
         MockServerHttpRequest getSecondHandDetail = MockServerHttpRequest.get("/api/v1/second-hand/prenda-123").build();
+        MockServerHttpRequest getPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications").build();
+        MockServerHttpRequest getPublicationDetail = MockServerHttpRequest.get("/api/v1/second-hand/publications/pub-456").build();
         MockServerHttpRequest getSegundaMano = MockServerHttpRequest.get("/api/v1/segunda-mano").build();
         MockServerHttpRequest getSegundaManoDetail = MockServerHttpRequest.get("/api/v1/segunda-mano/prenda-123").build();
+        MockServerHttpRequest getPublicaciones = MockServerHttpRequest.get("/api/v1/segunda-mano/publicaciones").build();
+        MockServerHttpRequest getPublicacionDetail = MockServerHttpRequest.get("/api/v1/segunda-mano/publicaciones/pub-456").build();
 
         assertTrue(filter.isPublicRequest(getSecondHand), "GET /second-hand debe ser público");
         assertTrue(filter.isPublicRequest(getSecondHandDetail), "GET /second-hand/{id} debe ser público");
+        assertTrue(filter.isPublicRequest(getPublications), "GET /second-hand/publications debe ser público");
+        assertTrue(filter.isPublicRequest(getPublicationDetail), "GET /second-hand/publications/{id} debe ser público");
         assertTrue(filter.isPublicRequest(getSegundaMano), "GET /segunda-mano debe ser público");
         assertTrue(filter.isPublicRequest(getSegundaManoDetail), "GET /segunda-mano/{id} debe ser público");
+        assertTrue(filter.isPublicRequest(getPublicaciones), "GET /segunda-mano/publicaciones debe ser público");
+        assertTrue(filter.isPublicRequest(getPublicacionDetail), "GET /segunda-mano/publicaciones/{id} debe ser público");
 
         // Rutas privadas del microservicio: consultas por usuario
         MockServerHttpRequest getUserSecondHand = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
+        MockServerHttpRequest getUserPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications/users/101").build();
         MockServerHttpRequest getUserSegundaMano = MockServerHttpRequest.get("/api/v1/segunda-mano/user/101").build();
+        MockServerHttpRequest getUsuariosPublicaciones = MockServerHttpRequest.get("/api/v1/segunda-mano/publicaciones/usuarios/101").build();
+
         assertFalse(filter.isPublicRequest(getUserSecondHand), "GET /second-hand/user/{id} es privado");
+        assertFalse(filter.isPublicRequest(getUserPublications), "GET /second-hand/publications/users/{userId} es privado (requiere propietario o admin)");
         assertFalse(filter.isPublicRequest(getUserSegundaMano), "GET /segunda-mano/user/{id} es privado");
+        assertFalse(filter.isPublicRequest(getUsuariosPublicaciones), "GET /segunda-mano/publicaciones/usuarios/{userId} es privado");
 
         // Rutas privadas del microservicio: donaciones (detalle, donante, fundación)
         MockServerHttpRequest getDonations = MockServerHttpRequest.get("/api/v1/donations").build();
@@ -326,12 +339,19 @@ class JwtTokenValidatorFilterTest {
         assertEquals(HttpStatus.UNAUTHORIZED, exFoundation.getResponse().getStatusCode(),
                 "Acceso anónimo a /api/v1/donaciones/foundation/{foundationId} debe retornar 401");
 
-        // 4. Consulta privada de publicaciones de un usuario específico
+        // 4. Consulta privada de publicaciones de un usuario específico (/user/{userId})
         MockServerHttpRequest reqUserPubs = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
         MockServerWebExchange exUserPubs = MockServerWebExchange.from(reqUserPubs);
         StepVerifier.create(filter.filter(exUserPubs, ex -> Mono.empty())).verifyComplete();
         assertEquals(HttpStatus.UNAUTHORIZED, exUserPubs.getResponse().getStatusCode(),
                 "Acceso anónimo a /api/v1/second-hand/user/{userId} debe retornar 401");
+
+        // 5. Consulta privada definitiva de publicaciones por usuario (/publications/users/{userId})
+        MockServerHttpRequest reqDefUserPubs = MockServerHttpRequest.get("/api/v1/second-hand/publications/users/101").build();
+        MockServerWebExchange exDefUserPubs = MockServerWebExchange.from(reqDefUserPubs);
+        StepVerifier.create(filter.filter(exDefUserPubs, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exDefUserPubs.getResponse().getStatusCode(),
+                "Acceso anónimo a /api/v1/second-hand/publications/users/{userId} debe retornar 401");
     }
 
     @Test
@@ -385,19 +405,39 @@ class JwtTokenValidatorFilterTest {
     @Test
     @DisplayName("Filter GET Consulta Publicaciones: Acceso anónimo fluye hacia downstream sin requerir token")
     void filter_consultaGetPublicacionesSinToken_permiteContinuar() {
+        // 1. /api/v1/second-hand
         MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/second-hand").build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
-
         AtomicBoolean chainCalled = new AtomicBoolean(false);
-
         Mono<Void> result = filter.filter(exchange, ex -> {
             chainCalled.set(true);
             return Mono.empty();
         });
-
         StepVerifier.create(result).verifyComplete();
-        assertTrue(chainCalled.get(), "La consulta GET pública debe fluir hacia downstream");
+        assertTrue(chainCalled.get(), "La consulta GET pública /second-hand debe fluir hacia downstream");
         assertNotEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+
+        // 2. /api/v1/second-hand/publications (catálogo canónico)
+        MockServerHttpRequest reqPubs = MockServerHttpRequest.get("/api/v1/second-hand/publications").build();
+        MockServerWebExchange exPubs = MockServerWebExchange.from(reqPubs);
+        AtomicBoolean chainCalledPubs = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(exPubs, ex -> {
+            chainCalledPubs.set(true);
+            return Mono.empty();
+        })).verifyComplete();
+        assertTrue(chainCalledPubs.get(), "La consulta GET pública /second-hand/publications debe fluir");
+        assertNotEquals(HttpStatus.UNAUTHORIZED, exPubs.getResponse().getStatusCode());
+
+        // 3. /api/v1/second-hand/publications/pub-123 (detalle de publicación)
+        MockServerHttpRequest reqDetail = MockServerHttpRequest.get("/api/v1/second-hand/publications/pub-123").build();
+        MockServerWebExchange exDetail = MockServerWebExchange.from(reqDetail);
+        AtomicBoolean chainCalledDetail = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(exDetail, ex -> {
+            chainCalledDetail.set(true);
+            return Mono.empty();
+        })).verifyComplete();
+        assertTrue(chainCalledDetail.get(), "La consulta GET pública /second-hand/publications/{id} debe fluir");
+        assertNotEquals(HttpStatus.UNAUTHORIZED, exDetail.getResponse().getStatusCode());
     }
 
     @Test
