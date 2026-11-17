@@ -79,6 +79,11 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
 
         assertTrue(routeUriMap.containsKey("ms-chat"));
         assertTrue(routeUriMap.get("ms-chat").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
+        assertEquals("https", routeUriMap.get("ms-chat").getScheme());
+
+        assertTrue(routeUriMap.containsKey("ms-chat-ws"));
+        assertTrue(routeUriMap.get("ms-chat-ws").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
+        assertEquals("wss", routeUriMap.get("ms-chat-ws").getScheme());
 
         assertTrue(routeUriMap.containsKey("ms-usuarios"));
         assertTrue(routeUriMap.get("ms-usuarios").getHost().contains("styleradar-qa-app.azurewebsites.net"));

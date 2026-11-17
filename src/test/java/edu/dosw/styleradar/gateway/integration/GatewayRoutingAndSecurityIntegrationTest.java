@@ -16,16 +16,30 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.web.reactive.socket.WebSocketMessage;
+import org.springframework.web.reactive.socket.client.ReactorNettyWebSocketClient;
+import org.springframework.web.reactive.socket.client.WebSocketClient;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import reactor.core.publisher.Mono;
+import reactor.netty.DisposableServer;
+import reactor.test.StepVerifier;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -37,6 +51,8 @@ class GatewayRoutingAndSecurityIntegrationTest {
     private static final HttpServer mockHttpServer;
     private static final ExecutorService serverExecutor;
     private static final int mockPort;
+    private static final DisposableServer mockWsServer;
+    private static final int mockWsPort;
 
     static {
         try {
@@ -46,10 +62,22 @@ class GatewayRoutingAndSecurityIntegrationTest {
             mockPort = mockHttpServer.getAddress().getPort();
             configureMockEndpoints();
             mockHttpServer.start();
+
+            mockWsServer = reactor.netty.http.server.HttpServer.create()
+                    .host("127.0.0.1")
+                    .port(0)
+                    .route(routes -> routes.ws("/ws", (in, out) ->
+                            out.sendString(Mono.just("{\"event\":\"CHAT_CONNECTED\",\"status\":\"OK\"}"))
+                    ))
+                    .bindNow();
+            mockWsPort = mockWsServer.port();
         } catch (IOException e) {
             throw new ExceptionInInitializerError(e);
         }
     }
+
+    @LocalServerPort
+    private int gatewayPort;
 
     @Autowired
     private WebTestClient webTestClient;
@@ -269,13 +297,15 @@ class GatewayRoutingAndSecurityIntegrationTest {
             }
         });
 
-        // 10. Endpoint mock para chat / WebSocket handshake (/ws)
-        mockHttpServer.createContext("/ws", exchange -> {
+        // 10. Endpoint mock para chat REST (/api/v1/conversations)
+        mockHttpServer.createContext("/api/v1/conversations", exchange -> {
             try {
                 exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
                 String response = "{"
                         + "\"service\":\"ms-chat\","
-                        + "\"endpoint\":\"/ws\","
+                        + "\"endpoint\":\"/api/v1/conversations\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
                         + "\"status\":\"UP\""
                         + "}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
@@ -322,6 +352,9 @@ class GatewayRoutingAndSecurityIntegrationTest {
         if (serverExecutor != null) {
             serverExecutor.shutdownNow();
         }
+        if (mockWsServer != null) {
+            mockWsServer.disposeNow();
+        }
     }
 
     @DynamicPropertySource
@@ -330,6 +363,7 @@ class GatewayRoutingAndSecurityIntegrationTest {
         registry.add("DONACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + mockPort);
         registry.add("NOTIFICACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + mockPort);
         registry.add("CHAT_SERVICE_URL", () -> "http://127.0.0.1:" + mockPort);
+        registry.add("CHAT_WS_SERVICE_URL", () -> "ws://127.0.0.1:" + mockWsPort);
         registry.add("security.jwt.secret-base64", () -> TEST_SECRET_BASE64);
     }
 
@@ -616,15 +650,64 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Chat/WebSocket: Handshake anónimo (/ws) es permitido como ruta pública y enrutado a ms-chat")
-    void shouldAllowWebSocketHandshakeWithoutTokenAndRouteToChat() {
+    @DisplayName("Integración Chat/REST: Consulta autenticada (/api/v1/conversations) se enruta a ms-chat")
+    void shouldRouteChatConversationsWithValidToken() {
+        String token = generateValidToken("user-chat-1", "ROLE_CLIENTE");
+
         webTestClient.get()
-                .uri("/ws")
+                .uri("/api/v1/conversations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-chat")
-                .jsonPath("$.endpoint").isEqualTo("/ws");
+                .jsonPath("$.endpoint").isEqualTo("/api/v1/conversations")
+                .jsonPath("$.receivedUserId").isEqualTo("user-chat-1");
+    }
+
+    @Test
+    @DisplayName("Integración Chat/WebSocket: Petición HTTP Upgrade retorna status 101 Switching Protocols a través del Gateway")
+    void shouldReturn101SwitchingProtocolsOnWebSocketUpgrade() {
+        HttpResponseStatus status = reactor.netty.http.client.HttpClient.create()
+                .headers(h -> {
+                    h.set(HttpHeaderNames.UPGRADE, HttpHeaderValues.WEBSOCKET);
+                    h.set(HttpHeaderNames.CONNECTION, HttpHeaderValues.UPGRADE);
+                    h.set(HttpHeaderNames.SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==");
+                    h.set(HttpHeaderNames.SEC_WEBSOCKET_VERSION, "13");
+                })
+                .get()
+                .uri("http://127.0.0.1:" + gatewayPort + "/ws")
+                .responseSingle((res, bytes) -> Mono.just(res.status()))
+                .block(Duration.ofSeconds(5));
+
+        org.junit.jupiter.api.Assertions.assertNotNull(status);
+        org.junit.jupiter.api.Assertions.assertEquals(101, status.code(), "El handshake a través del Gateway debe responder 101 Switching Protocols");
+    }
+
+    @Test
+    @DisplayName("Integración Chat/WebSocket: Handshake WebSocket real con respuesta 101 y comunicación bidireccional")
+    void shouldPerformRealWebSocketHandshakeAndReceiveFrames() {
+        WebSocketClient client = new ReactorNettyWebSocketClient();
+        URI uri = URI.create("ws://127.0.0.1:" + gatewayPort + "/ws");
+
+        AtomicReference<String> messageReceived = new AtomicReference<>();
+        AtomicBoolean handshakeCompleted = new AtomicBoolean(false);
+
+        Mono<Void> sessionMono = client.execute(uri, session -> {
+            handshakeCompleted.set(true);
+            return session.receive()
+                    .map(WebSocketMessage::getPayloadAsText)
+                    .take(1)
+                    .doOnNext(messageReceived::set)
+                    .then(session.close());
+        });
+
+        StepVerifier.create(sessionMono)
+                .expectComplete()
+                .verify(Duration.ofSeconds(5));
+
+        org.junit.jupiter.api.Assertions.assertTrue(handshakeCompleted.get(), "El handshake WebSocket (101) debe completarse");
+        org.junit.jupiter.api.Assertions.assertEquals("{\"event\":\"CHAT_CONNECTED\",\"status\":\"OK\"}", messageReceived.get());
     }
 
     @Test

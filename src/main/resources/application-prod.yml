@@ -110,7 +110,12 @@ spring:
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
-            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**, /ws/**, /ws-chat/**, /ws
+            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**
+
+        - id: ms-chat-ws
+          uri: ${CHAT_WS_SERVICE_URL:wss://gj-chat-service-prod-santi.azurewebsites.net}
+          predicates:
+            - Path=/ws/**, /ws-chat/**, /ws, /ws-chat
 
         # Paquete 4: Pagos y Estadísticas
         - id: ms-pagos-suscripciones

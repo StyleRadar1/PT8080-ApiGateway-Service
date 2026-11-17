@@ -145,11 +145,17 @@ spring:
           predicates:
             - Path=/api/v1/notificaciones/**, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/users/*/notifications
 
-        # ms-chat: Chat en Vivo, WebSockets y Mensajería (Puerto 8320)
+        # ms-chat: Operaciones REST de Chat en Vivo y Mensajería (Puerto 8320)
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:http://localhost:8320}
           predicates:
-            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**, /ws/**, /ws-chat/**, /ws
+            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**
+
+        # ms-chat-ws: Enrutamiento WebSocket en Tiempo Real con esquema ws:// (Puerto 8320)
+        - id: ms-chat-ws
+          uri: ${CHAT_WS_SERVICE_URL:${CHAT_SERVICE_WS_URL:ws://localhost:8320}}
+          predicates:
+            - Path=/ws/**, /ws-chat/**, /ws, /ws-chat
 
         # --- PAQUETE 4: PAGOS Y ESTADÍSTICAS (NQS · Bloque 8400) ---
         # ms-pagos-suscripciones: Pasarela de Pagos y Suscripciones (Puerto 8400)
