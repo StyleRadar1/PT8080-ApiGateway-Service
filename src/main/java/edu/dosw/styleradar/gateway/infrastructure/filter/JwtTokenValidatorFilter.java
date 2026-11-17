@@ -41,7 +41,9 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     public static final String USER_ROLE_HEADER = "X-User-Role";
 
     public static final List<String> DEFAULT_PUBLIC_PATHS = List.of(
-            "/actuator/**",
+            "/actuator/health",
+            "/actuator/health/**",
+            "/actuator/info",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs",

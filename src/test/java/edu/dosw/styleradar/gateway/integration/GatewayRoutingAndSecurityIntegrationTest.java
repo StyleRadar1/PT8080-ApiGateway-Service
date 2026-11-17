@@ -11,9 +11,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
 import javax.crypto.SecretKey;
@@ -28,26 +29,34 @@ import java.util.concurrent.Executors;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@DirtiesContext
 class GatewayRoutingAndSecurityIntegrationTest {
 
     private static final String TEST_SECRET_BASE64 = "c3R5bGVyYWRhci1qd3Qtc2VjcmV0LWtleS0yMDI2LXBvcnRhbDgwODAtc3VwZXItc2VjdXJlCg==";
 
-    private static HttpServer mockHttpServer;
-    private static ExecutorService serverExecutor;
-    private static int mockPort;
+    private static final HttpServer mockHttpServer;
+    private static final ExecutorService serverExecutor;
+    private static final int mockPort;
+
+    static {
+        try {
+            serverExecutor = Executors.newFixedThreadPool(4);
+            mockHttpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+            mockHttpServer.setExecutor(serverExecutor);
+            mockPort = mockHttpServer.getAddress().getPort();
+            configureMockEndpoints();
+            mockHttpServer.start();
+        } catch (IOException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
 
     @Autowired
     private WebTestClient webTestClient;
 
     private SecretKey secretKey;
 
-    @BeforeAll
-    static void startMockBackend() throws IOException {
-        serverExecutor = Executors.newFixedThreadPool(4);
-        mockHttpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        mockHttpServer.setExecutor(serverExecutor);
-        mockPort = mockHttpServer.getAddress().getPort();
-
+    private static void configureMockEndpoints() {
         // 1. Endpoint mock para Probador Virtual (/api/v1/try-on/health)
         mockHttpServer.createContext("/api/v1/try-on/health", exchange -> {
             try {
@@ -62,10 +71,10 @@ class GatewayRoutingAndSecurityIntegrationTest {
                         + "}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.getResponseHeaders().set("Connection", "close");
                 exchange.sendResponseHeaders(200, bytes.length);
                 try (OutputStream os = exchange.getResponseBody()) {
                     os.write(bytes);
+                    os.flush();
                 }
             } finally {
                 exchange.close();
@@ -82,10 +91,10 @@ class GatewayRoutingAndSecurityIntegrationTest {
                         + "}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.getResponseHeaders().set("Connection", "close");
                 exchange.sendResponseHeaders(200, bytes.length);
                 try (OutputStream os = exchange.getResponseBody()) {
                     os.write(bytes);
+                    os.flush();
                 }
             } finally {
                 exchange.close();
@@ -102,17 +111,15 @@ class GatewayRoutingAndSecurityIntegrationTest {
                         + "}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.getResponseHeaders().set("Connection", "close");
                 exchange.sendResponseHeaders(200, bytes.length);
                 try (OutputStream os = exchange.getResponseBody()) {
                     os.write(bytes);
+                    os.flush();
                 }
             } finally {
                 exchange.close();
             }
         });
-
-        mockHttpServer.start();
     }
 
     @AfterAll
@@ -242,5 +249,25 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .expectBody()
                 .jsonPath("$.status").isEqualTo(401)
                 .jsonPath("$.error").isEqualTo("Unauthorized");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: /actuator/health es público y responde 200 OK")
+    void shouldAllowPublicAccessToActuatorHealth() {
+        webTestClient.get()
+                .uri("/actuator/health")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo("UP");
+    }
+
+    @Test
+    @DisplayName("Mitigación CVE-2025-41243: El endpoint administrativo /actuator/gateway no está expuesto (retorna 404 Not Found)")
+    void shouldVerifyActuatorGatewayIsNotExposed() {
+        webTestClient.get()
+                .uri("/actuator/gateway/routes")
+                .exchange()
+                .expectStatus().isNotFound();
     }
 }

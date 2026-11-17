@@ -179,6 +179,7 @@ class JwtTokenValidatorFilterTest {
     @DisplayName("Discriminación de rutas públicas vs protegidas: isPublicPath valida correctamente los patrones")
     void isPublicPath_validaPatronesCorrectamente() {
         assertTrue(filter.isPublicPath("/actuator/health"));
+        assertTrue(filter.isPublicPath("/actuator/info"));
         assertTrue(filter.isPublicPath("/swagger-ui.html"));
         assertTrue(filter.isPublicPath("/swagger-ui/index.html"));
         assertTrue(filter.isPublicPath("/v3/api-docs"));
@@ -187,6 +188,9 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicPath("/api/v1/auth/register"));
         assertTrue(filter.isPublicPath("/fallback/probador"));
 
+        assertFalse(filter.isPublicPath("/actuator/gateway"));
+        assertFalse(filter.isPublicPath("/actuator/gateway/routes"));
+        assertFalse(filter.isPublicPath("/actuator/env"));
         assertFalse(filter.isPublicPath("/api/v1/try-on/jobs"));
         assertFalse(filter.isPublicPath("/api/v1/probador/siluetas"));
         assertFalse(filter.isPublicPath("/api/v1/donaciones/campanas"));
@@ -201,5 +205,23 @@ class JwtTokenValidatorFilterTest {
         JwtTokenValidatorFilter customFilter = new JwtTokenValidatorFilter(SECRET_BASE64, List.of("/custom/public/**"));
         assertTrue(customFilter.isPublicPath("/custom/public/test"));
         assertFalse(customFilter.isPublicPath("/actuator/health"));
+    }
+
+    @Test
+    @DisplayName("Mitigación CVE-2025-41243: Acceso anónimo a /actuator/gateway/routes es bloqueado con 401 Unauthorized")
+    void filter_accesoAnonimoActuatorGateway_retorna401Unauthorized() {
+        MockServerHttpRequest request = MockServerHttpRequest.get("/actuator/gateway/routes").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        Mono<Void> result = filter.filter(exchange, ex -> {
+            chainCalled.set(true);
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertFalse(chainCalled.get(), "La ruta administrativa /actuator/gateway no debe ser accesible anónimamente");
+        assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
     }
 }

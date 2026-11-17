@@ -170,15 +170,17 @@ spring:
                 name: donacionesCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
-# Configuración de Actuator & Métricas
+# Configuración de Actuator & Métricas (CVE-2025-41243 mitigado: endpoint gateway deshabilitado)
 management:
   endpoints:
     web:
       exposure:
-        include: health, info, gateway
+        include: health, info
   endpoint:
     health:
       show-details: always
+    gateway:
+      enabled: false
   info:
     git:
       mode: full

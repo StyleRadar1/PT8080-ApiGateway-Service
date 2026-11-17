@@ -136,6 +136,8 @@ management:
   endpoint:
     health:
       show-details: never
+    gateway:
+      enabled: false
 
 logging:
   level:
