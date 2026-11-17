@@ -23,7 +23,7 @@ spring:
         - id: ms-donaciones-swagger
           uri: ${DONACIONES_SERVICE_URL:https://styleradar-donaciones-prod-jmunar.azurewebsites.net}
           predicates:
-            - Path=/v3/api-docs/donaciones
+            - Path=/v3/api-docs/donaciones, /v3/api-docs/donations
           filters:
             - SetPath=/api/v1/v3/api-docs
 
@@ -68,58 +68,59 @@ spring:
           predicates:
             - Path=/api/v1/auth/**
 
-        - id: ms-usuarios
-          uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
-          predicates:
-            - Path=/api/v1/usuarios/**, /api/v1/admin/**
-
         - id: ms-tiendas
           uri: ${TIENDAS_SERVICE_URL:https://styleradar-tiendas-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/tiendas/**, /api/v1/almacenes/**
+            - Path=/api/v1/stores/**, /api/v1/foundations/**, /api/v1/tiendas/**, /api/v1/almacenes/**, /api/v1/admin/stores/**, /api/v1/admin/foundations/**
+
+        - id: ms-usuarios
+          uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
+          predicates:
+            - Path=/api/v1/usuarios/**, /api/v1/admin/usuarios/**, /api/v1/admin/**
 
         # Paquete 2: Catálogo
         - id: ms-inventario
           uri: ${INVENTARIO_SERVICE_URL:https://styleradar-inventario-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/inventario/**
+            - Path=/api/v1/inventario/**, /api/v1/inventory/**
 
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:https://styleradar-catalogo-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/catalogo/**, /api/v1/prendas/**
+            - Path=/api/v1/catalogo/**, /api/v1/prendas/**, /api/v1/catalog/**, /api/v1/items/**
 
         - id: ms-geolocalizacion
           uri: ${GEOLOCALIZACION_SERVICE_URL:https://styleradar-geolocalizacion-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/geolocalizacion/**
+            - Path=/api/v1/geolocalizacion/**, /api/v1/geolocation/**
 
+        # ms-playlist
         - id: ms-playlist
           uri: ${PLAYLIST_SERVICE_URL:https://styleradar-playlist-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/playlist/**
+            - Path=/api/v1/playlist/**, /api/v1/playlists/**
 
         # Paquete 3: Mensajería
         - id: ms-notificaciones
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/notificaciones/**
+            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**
 
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
-            - Path=/api/v1/conversaciones/**, /api/v1/chat/**
+            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**
 
         # Paquete 4: Pagos y Estadísticas
         - id: ms-pagos-suscripciones
           uri: ${PAGOS_SERVICE_URL:https://styleradar-pagos-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/pagos/**
+            - Path=/api/v1/pagos/**, /api/v1/payments/**, /api/v1/subscriptions/**
 
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:https://styleradar-estadisticas-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/estadisticas/**
+            - Path=/api/v1/estadisticas/**, /api/v1/statistics/**, /api/v1/analytics/**
 
         # Paquete 5: Experiencia y Donaciones
         - id: ms-probador-virtual
@@ -135,7 +136,7 @@ spring:
         - id: ms-segunda-vida-donaciones
           uri: ${DONACIONES_SERVICE_URL:https://styleradar-donaciones-prod-jmunar.azurewebsites.net}
           predicates:
-            - Path=/api/v1/donaciones/**, /api/v1/segunda-mano/**
+            - Path=/api/v1/donations/**, /api/v1/second-hand/**, /api/v1/donaciones/**, /api/v1/segunda-mano/**
           filters:
             - name: CircuitBreaker
               args:

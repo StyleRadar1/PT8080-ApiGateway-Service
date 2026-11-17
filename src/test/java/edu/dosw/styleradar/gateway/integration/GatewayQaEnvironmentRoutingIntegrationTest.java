@@ -100,4 +100,23 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertEquals("styleradar-qa-app.azurewebsites.net", routeUriMap.get("ms-usuarios-swagger").getHost());
         assertEquals("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net", routeUriMap.get("ms-chat-swagger").getHost());
     }
+
+    @Test
+    @DisplayName("Ambiente QA: Certifica que ms-segunda-vida-donaciones enrute los paths estandarizados (/donations/** y /second-hand/**)")
+    void shouldVerifyDonacionesRoutesContainStandardizedPaths() {
+        List<Route> routes = routeLocator.getRoutes().collectList().block();
+        assertNotNull(routes);
+
+        Route donacionesRoute = routes.stream()
+                .filter(r -> "ms-segunda-vida-donaciones".equals(r.getId()))
+                .findFirst()
+                .orElse(null);
+
+        assertNotNull(donacionesRoute, "La ruta ms-segunda-vida-donaciones debe existir");
+        String predicateString = donacionesRoute.getPredicate().toString();
+        assertTrue(predicateString.contains("/api/v1/donations") || predicateString.contains("donations"),
+                "Debe incluir el prefijo estandarizado /api/v1/donations/**");
+        assertTrue(predicateString.contains("/api/v1/second-hand") || predicateString.contains("second-hand"),
+                "Debe incluir el prefijo estandarizado /api/v1/second-hand/**");
+    }
 }

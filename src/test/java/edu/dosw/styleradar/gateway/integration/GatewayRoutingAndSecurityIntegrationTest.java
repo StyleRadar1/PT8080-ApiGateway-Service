@@ -120,6 +120,54 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 exchange.close();
             }
         });
+
+        // 4. Endpoint mock para consulta y creación de publicaciones (/api/v1/second-hand)
+        mockHttpServer.createContext("/api/v1/second-hand", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String method = exchange.getRequestMethod();
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"method\":\"" + method + "\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 5. Endpoint mock para creación/consulta de donaciones (/api/v1/donations)
+        mockHttpServer.createContext("/api/v1/donations", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String method = exchange.getRequestMethod();
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"method\":\"" + method + "\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
     }
 
     @AfterAll
@@ -168,15 +216,39 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Seguridad: Acceso anónimo a ruta protegida (/api/v1/donaciones/health) es rechazado con 401")
-    void shouldRejectAnonymousAccessToDonacionesWith401() {
-        webTestClient.get()
-                .uri("/api/v1/donaciones/health")
+    @DisplayName("Integración Seguridad: Creación anónima de donación (POST /api/v1/donations) es rechazada con 401")
+    void shouldRejectAnonymousAccessToDonationsCreationWith401() {
+        webTestClient.post()
+                .uri("/api/v1/donations")
                 .exchange()
                 .expectStatus().isUnauthorized()
                 .expectBody()
                 .jsonPath("$.status").isEqualTo(401)
                 .jsonPath("$.error").isEqualTo("Unauthorized");
+    }
+
+    @Test
+    @DisplayName("Integración Seguridad: Creación anónima de publicación (POST /api/v1/second-hand) es rechazada con 401")
+    void shouldRejectAnonymousAccessToSecondHandCreationWith401() {
+        webTestClient.post()
+                .uri("/api/v1/second-hand")
+                .exchange()
+                .expectStatus().isUnauthorized()
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("Unauthorized");
+    }
+
+    @Test
+    @DisplayName("Integración Consulta Pública: Consulta anónima GET /api/v1/second-hand es permitida (200 OK)")
+    void shouldAllowAnonymousAccessToPublicSecondHandConsultation() {
+        webTestClient.get()
+                .uri("/api/v1/second-hand")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.status").isEqualTo("UP");
     }
 
     @Test
@@ -219,6 +291,36 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-donaciones")
                 .jsonPath("$.status").isEqualTo("UP");
+    }
+
+    @Test
+    @DisplayName("Integración Enrutamiento con Token: POST /api/v1/donations se enruta con token válido")
+    void shouldRouteDonationsCreationWithValidToken() {
+        String token = generateValidToken("user-donante-77", "ROLE_DONANTE");
+
+        webTestClient.post()
+                .uri("/api/v1/donations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.receivedUserId").isEqualTo("user-donante-77");
+    }
+
+    @Test
+    @DisplayName("Integración Enrutamiento con Token: POST /api/v1/second-hand se enruta con token válido")
+    void shouldRouteSecondHandCreationWithValidToken() {
+        String token = generateValidToken("user-vendedor-88", "ROLE_CLIENTE");
+
+        webTestClient.post()
+                .uri("/api/v1/second-hand")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.receivedUserId").isEqualTo("user-vendedor-88");
     }
 
     @Test

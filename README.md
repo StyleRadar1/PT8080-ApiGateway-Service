@@ -117,13 +117,19 @@ El API Gateway está construido sobre **Spring Cloud Gateway** y **Project React
 
 ### Diagramas del Componente
 
-#### 3.1 Diagrama de Componentes Perimetrales (Ecosistema StyleRadar)
+#### 3.1 Diagrama de Componentes General (Ecosistema StyleRadar)
 
 <div align="center">
-  <img src="docs/uml/CompGeneral.png" alt="Diagrama de Componentes General StyleRadar" width="100%" />
+  <img src="docs/uml/DiagramaComponentesGeneral.png" alt="Diagrama de Componentes General StyleRadar" width="100%" />
 </div>
 
-El API Gateway se sitúa en la frontera entre la red pública de clientes (Single Page Applications y apps móviles) y la red interna privada de microservicios de StyleRadar. Todas las solicitudes ingresan obligatoriamente a través del puerto `8080`, eliminando la necesidad de exponer los puertos internos (`8081` a `8093`) a internet.
+Este diagrama presenta la visión arquitectónica global de StyleRadar y delimita el rol estratégico del **API Gateway** como frontera perimetral del sistema:
+
+* **Punto Único de Entrada Perimetral (Single Point of Entry):** Todas las solicitudes emitidas desde la aplicación cliente (`StyleRadar Client Web App`) ingresan de forma obligatoria y exclusiva a través del **API Gateway** en el puerto `8080`. Ningún cliente externo posee visibilidad directa ni acceso a las direcciones IP o puertos de la red interna.
+* **Ocultamiento de Topología Interna y Reverse Proxy:** El Gateway enruta el tráfico hacia el ecosistema de 13 microservicios (`ms-auth` en `:8100`, `ms-usuarios` en `:8120`, `ms-tiendas` en `:8140`, `ms-notificaciones` en `:8300`, `ms-inventario` en `:8200`, `ms-itemcatalogo` en `:8220`, `ms-segunda-vida` en `:8280`, `ms-chat` en `:8320`, `ms-playlist` en `:8260`, `ms-pagos` en `:8400`, `ms-geolocalizacion` en `:8240`, `ms-probador-virtual` en `:8500` y `ms-estadisticas` en `:8420`). Gracias a este enrutamiento perimetral, los microservicios downstream pueden evolucionar, escalar o cambiar de dirección interna sin impactar el contrato consumido por el frontend.
+* **Naturaleza Stateless vs. Aislamiento de Persistencia (*Database-per-Service*):** Mientras cada microservicio de negocio gestiona su propia base de datos relacional PostgreSQL de manera 100% aislada (`usuarios_db`, `tiendas_db`, `catalogo_db`, `probador_db`, etc.), el API Gateway es un componente **completamente sin estado (stateless)**. No persiste registros en disco ni compite por bloqueos de base de datos, lo que le permite maximizar el rendimiento reactivo no bloqueante de Netty y escalar horizontalmente bajo picos de tráfico masivo.
+* **Aceleración en Memoria y Desacoplamiento Asíncrono:** Los microservicios consumen instancias de **Redis** para caching de alta velocidad y colas en **RabbitMQ** para procesamiento de eventos en segundo plano (notificaciones, analítica, transacciones). El API Gateway opera en una capa superior a esta mensajería, procesando únicamente tráfico HTTP/WebSocket síncrono perimetral de alta concurrencia.
+* **Frontera de Servicios Externos (SaaS):** Las integraciones de terceros (Google OAuth, MercadoPago API, Azure Blob Storage y FASHN AI API) son consumidas internamente por los microservicios dueños de cada dominio. El Gateway actúa como escudo protector, evitando que llamadas externas no autorizadas puedan comprometer los conectores de infraestructura del sistema.
 
 #### 3.2 Diagrama de Flujo y Cadena de Filtros Reactivos
 
@@ -153,31 +159,38 @@ Cada petición que cruza el Gateway atraviesa una tubería reactiva ordenada:
 3. **`JwtTokenValidatorFilter`:** Decodifica tokens Bearer JWT y propaga la identidad autenticada hacia los microservicios sin re-consultar bases de datos.
 4. **`CircuitBreaker`:** Si el microservicio downstream no responde dentro del umbral temporal, intercepta la llamada y redirige hacia un endpoint de contingencia amigable.
 
-#### 3.3 Diagrama de Secuencia de Enrutamiento y Fallback
+#### 3.3 Diagrama de Secuencia de Enrutamiento, Validación JWT y Resiliencia
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Cliente as Frontend (React / Movil)
-    participant GW as API Gateway (:8080)
-    participant Filter as Cadena de Filtros
-    participant TryOn as ms-probador-virtual (:8500)
-    participant Fallback as FallbackController
+<div align="center">
+  <img src="docs/uml/DiagramaSecuenciaGateway.png" alt="Diagrama de Secuencia Enrutamiento y Fallback API Gateway" width="100%" />
+</div>
 
-    Cliente->>GW: POST /api/v1/probador/jobs (Bearer JWT)
-    GW->>Filter: Ejecutar filtros perimetrales
-    Filter->>Filter: Asignar X-Correlation-Id & Extraer X-User-Id
-    
-    alt Microservicio Saludable
-        Filter->>TryOn: Reenviar con headers perimetrales
-        TryOn-->>GW: HTTP 202 Accepted (Location: /jobs/{id})
-        GW-->>Cliente: HTTP 202 Accepted + X-Correlation-Id
-    else Timeout / Caída de Red (Circuit Breaker Abierto)
-        Filter->>Fallback: Redirigir a /fallback/probador
-        Fallback-->>GW: HTTP 503 Servicio Temporalmente No Disponible
-        GW-->>Cliente: HTTP 503 JSON Amigable RFC 7807
-    end
-```
+Este diagrama modela la interacción temporal del flujo de peticiones que cruzan el perímetro del Gateway:
+
+* **Petición con Autenticación Bearer:** El cliente frontend envía una solicitud HTTP con token JWT. El Gateway intercepta la llamada en el puerto `8080`, ejecuta la cadena de filtros reactivos (`GlobalCorsFilter`, `GlobalRequestLoggingFilter` y `JwtTokenValidatorFilter`), sanea las cabeceras entrantes para neutralizar cualquier intento de spoofing y valida la firma criptográfica HMAC-SHA256. Al comprobar su validez, inyecta downstream las cabeceras seguras `X-User-Id` y `X-User-Role` junto al identificador de trazabilidad `X-Correlation-Id`.
+* **Escenario de Éxito (Camino Saludable):** Si el microservicio downstream se encuentra en estado óptimo, procesa la solicitud y retorna una respuesta exitosa (por ejemplo, `HTTP 202 Accepted` en operaciones asíncronas), la cual es transferida de inmediato al cliente con sobrecarga mínima (< 5 ms).
+* **Tolerancia a Fallos y Degeneración Elegante (Circuit Breaker con Resilience4j):** Si el microservicio de destino experimenta una caída de red, latencia excesiva o supera el umbral de fallos configurado, el Circuit Breaker de Resilience4j entra en estado abierto e intercepta la llamada, redirigiéndola hacia el `FallbackController` interno. El Gateway responde al usuario con un código `HTTP 503 Service Unavailable` formateado bajo el estándar RFC 7807 (Problem Details), protegiendo al ecosistema de fallos en cascada y garantizando una experiencia de usuario amigable.
+* **Acceso Anónimo a Consultas Públicas:** Para las rutas de consulta pública (`GET /api/v1/second-hand/**` y `GET /api/v1/donations/**`), el filtro permite el paso de peticiones anónimas sin token. En contraste, las operaciones de creación, edición o donación (`POST`, `PUT`, `PATCH`, `DELETE`) exigen estrictamente autenticación Bearer, rechazando accesos no autorizados con `HTTP 401 Unauthorized`.
+
+#### 3.4 Diagrama de Despliegue General (Infraestructura de Contenedores y Topología de Red)
+
+<div align="center">
+  <img src="docs/uml/DiagramaDespliegueGeneral.png" alt="Diagrama de Despliegue General StyleRadar" width="100%" />
+</div>
+
+Este diagrama ilustra la topología física y de despliegue en la nube para la solución StyleRadar, destacando cómo se sitúa el **API Gateway** en la infraestructura de producción:
+
+* **Ingreso Seguro de Clientes y Terminación TLS:**
+  - Los usuarios interactúan a través de navegadores web y dispositivos móviles (`«Artifact» Web Application`), estableciendo conexiones cifradas mediante HTTPS/TLS con el contenedor **`«Container App» API Gateway`**.
+  - El Gateway es el **único contenedor con Ingress público expuesto** (puerto `8080`) en todo el clúster de la nube (`StyleRadar Cloud Environment`). Esto actúa como barrera de mitigación frente a ataques directos por denegación de servicio (DoS) y escaneos de puertos maliciosos.
+* **Malla de Contenedores de Microservicios:**
+  - Detrás del Gateway, los 13 microservicios se ejecutan en contenedores independientes aislados dentro de la red privada: `Auth` (:8100), `User` (:8120), `Stores` (:8140), `Notifications` (:8300), `Inventory` (:8200), `Catalog` (:8220), `Donations` (:8280), `Chat` (:8320), `Playlist` (:8260), `Payments` (:8400), `Geolocation` (:8240), `Virtual Try-On` (:8500) y `Statistics` (:8420).
+  - La comunicación interna entre el Gateway y estos contenedores viaja a través de una red virtual protegida (VNet / Azure Container Apps Environment), reduciendo latencias de transporte y eliminando la necesidad de balanceadores de carga externos redundantes.
+* **Desacoplamiento Total de Capas de Datos:**
+  - El diagrama detalla cómo cada microservicio interactúa con su propio contenedor/instancia de base de datos relacional PostgreSQL bajo el patrón *Database-per-Service*, además de conectarse a nodos de **Redis** y brokers **RabbitMQ**.
+  - Al no conectarse a ninguna base de datos ni broker, el API Gateway cuenta con una huella de memoria mínima (~150 MB de RAM), permitiendo arranques en menos de 3 segundos y facilitando despliegues elásticos *rolling update* o *blue/green* con cero tiempo de inactividad (*zero-downtime*).
+* **Frontera con Proveedores SaaS:**
+  - Los servicios en la nube externos (Azure Blob Storage para imágenes, Google Identity Platform para OAuth, MercadoPago para pagos y la API de FASHN AI para inferencia generativa) se consumen directamente desde los contenedores de backend autorizados, garantizando que el Gateway no almacene credenciales de terceros ni gestione llamadas salientes innecesarias.
 
 ---
 
@@ -197,21 +210,21 @@ sequenceDiagram
 
 | Microservicio | Paquete / Squad | Puerto Oficial | Prefijo de Ruta Expuesto | Circuit Breaker Activo | Host QA (Azure) | Host PROD (Azure) |
 | :--- | :--- | :---: | :--- | :---: | :--- | :--- |
-| `ms-auth` | P1: Identidad | `8100` | `/api/v1/auth/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-usuarios` | P1: Identidad | `8120` | `/api/v1/usuarios/**`, `/api/v1/admin/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-tiendas` | P1: Identidad | `8140` | `/api/v1/tiendas/**`, `/api/v1/almacenes/**` | No (Paso directo) | `styleradar-tiendas-qa` | `styleradar-tiendas-prod` |
-| `ms-inventario` | P2: Catálogo | `8200` | `/api/v1/inventario/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-item-catalogo` | P2: Catálogo | `8220` | `/api/v1/catalogo/**`, `/api/v1/prendas/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-geolocalizacion` | P2: Catálogo | `8240` | `/api/v1/geolocalizacion/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-playlist` | P2: Catálogo | `8260` | `/api/v1/playlist/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-notificaciones` | P3: Mensajería | `8300` | `/api/v1/notificaciones/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-chat` | P3: Mensajería | `8320` | `/api/v1/conversaciones/**`, `/api/v1/chat/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-pagos-suscripciones` | P4: Pagos | `8400` | `/api/v1/pagos/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
-| `ms-estadisticas` | P4: Pagos | `8420` | `/api/v1/estadisticas/**` | No (Paso directo) | `styleradar-backend-qa` | `styleradar-backend-prod` |
+| `ms-auth` | P1: Identidad | `8100` | `/api/v1/auth/**` | No (Paso directo) | `styleradar-auth-qa` | `styleradar-auth-prod` |
+| `ms-tiendas` | P1: Identidad | `8140` | `/api/v1/stores/**`, `/api/v1/foundations/**`, `/api/v1/tiendas/**`, `/api/v1/almacenes/**`, `/api/v1/admin/stores/**` | No (Paso directo) | `styleradar-tiendas-qa` | `styleradar-tiendas-prod` |
+| `ms-usuarios` | P1: Identidad | `8120` | `/api/v1/usuarios/**`, `/api/v1/admin/usuarios/**`, `/api/v1/admin/**` | No (Paso directo) | `styleradar-qa-app` | `styleradar-prod-app` |
+| `ms-inventario` | P2: Catálogo | `8200` | `/api/v1/inventario/**`, `/api/v1/inventory/**` | No (Paso directo) | `styleradar-inventario-qa` | `styleradar-inventario-prod` |
+| `ms-item-catalogo` | P2: Catálogo | `8220` | `/api/v1/catalogo/**`, `/api/v1/prendas/**`, `/api/v1/catalog/**`, `/api/v1/items/**` | No (Paso directo) | `styleradar-catalogo-qa` | `styleradar-catalogo-prod` |
+| `ms-geolocalizacion` | P2: Catálogo | `8240` | `/api/v1/geolocalizacion/**`, `/api/v1/geolocation/**` | No (Paso directo) | `styleradar-geolocalizacion-qa` | `styleradar-geolocalizacion-prod` |
+| `ms-playlist` | P2: Catálogo | `8260` | `/api/v1/playlist/**`, `/api/v1/playlists/**` | No (Paso directo) | `styleradar-playlist-qa` | `styleradar-playlist-prod` |
+| `ms-notificaciones` | P3: Mensajería | `8300` | `/api/v1/notificaciones/**`, `/api/v1/notifications/**` | No (Paso directo) | `styleradar-notificaciones-qa` | `styleradar-notificaciones-prod` |
+| `ms-chat` | P3: Mensajería | `8320` | `/api/v1/conversations/**`, `/api/v1/conversaciones/**`, `/api/v1/chat/**` | No (Paso directo) | `gj-chat-service-qa-santi-gxhjccffcxdgbfcj` | `gj-chat-service-prod-santi` |
+| `ms-pagos-suscripciones` | P4: Pagos | `8400` | `/api/v1/pagos/**`, `/api/v1/payments/**`, `/api/v1/subscriptions/**` | No (Paso directo) | `styleradar-pagos-qa` | `styleradar-pagos-prod` |
+| `ms-estadisticas` | P4: Pagos | `8420` | `/api/v1/estadisticas/**`, `/api/v1/statistics/**`, `/api/v1/analytics/**` | No (Paso directo) | `styleradar-estadisticas-qa` | `styleradar-estadisticas-prod` |
 | `ms-probador-virtual` | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | Sí (`/fallback/probador`) | `styleradar-virtualtryon-qa` | `styleradar-virtualtryon-prod` |
-| `ms-segunda-vida-donaciones` | P5: Experiencia | `8520` | `/api/v1/donaciones/**`, `/api/v1/segunda-mano/**` | Sí (`/fallback/general`) | `styleradar-donaciones-qa-jmunar` | `styleradar-donaciones-prod-jmunar` |
+| `ms-segunda-vida-donaciones` | P5: Experiencia | `8520` | `/api/v1/donations/**`, `/api/v1/second-hand/**`, `/api/v1/donaciones/**`, `/api/v1/segunda-mano/**` | Sí (`/fallback/general`) | `styleradar-donaciones-qa-jmunar` | `styleradar-donaciones-prod-jmunar` |
 | `ms-probador-swagger` | Documentación | `8500` | `/v3/api-docs/probador` $\to$ `/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
-| `ms-donaciones-swagger` | Documentación | `8520` | `/v3/api-docs/donaciones` $\to$ `/api/v1/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
+| `ms-donaciones-swagger` | Documentación | `8520` | `/v3/api-docs/donaciones`, `/v3/api-docs/donations` $\to$ `/api/v1/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
 | `api-gateway` | Perímetro | `8080` | `/actuator/**`, `/v3/api-docs`, `/swagger-ui.html` | N/A | `styleradar-gateway-qa` | `styleradar-gateway-prod` |
 
 ### Tabla Oficial de Despliegue y Bases de Datos por Ambiente (Rúbrica Sprint 2)
@@ -223,17 +236,17 @@ sequenceDiagram
 | `api-gateway` | `https://styleradar-gateway-qa.azurewebsites.net` | `https://styleradar-gateway-prod.azurewebsites.net` | N/A (Stateless) | N/A (Stateless) |
 | `ms-probador-virtual` | `https://styleradar-virtualtryon-qa.azurewebsites.net` | `https://styleradar-virtualtryon-prod.azurewebsites.net` | `probador_db_qa` | `probador_db_prod` |
 | `ms-segunda-vida-donaciones` | `https://styleradar-donaciones-qa-jmunar.azurewebsites.net` | `https://styleradar-donaciones-prod-jmunar.azurewebsites.net` | `donaciones_db_qa` | `donaciones_db_prod` |
-| `ms-auth` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `auth_db_qa` | `auth_db_prod` |
-| `ms-usuarios` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `usuarios_db_qa` | `usuarios_db_prod` |
+| `ms-auth` | `https://styleradar-auth-qa.azurewebsites.net` | `https://styleradar-auth-prod.azurewebsites.net` | `auth_db_qa` | `auth_db_prod` |
+| `ms-usuarios` | `https://styleradar-qa-app.azurewebsites.net` | `https://styleradar-prod-app.azurewebsites.net` | `usuarios_db_qa` | `usuarios_db_prod` |
 | `ms-tiendas` | `https://styleradar-tiendas-qa.azurewebsites.net` | `https://styleradar-tiendas-prod.azurewebsites.net` | `tiendas_db_qa` | `tiendas_db_prod` |
-| `ms-inventario` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `inventario_db_qa` | `inventario_db_prod` |
-| `ms-item-catalogo` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `catalogo_db_qa` | `catalogo_db_prod` |
-| `ms-geolocalizacion` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `geolocalizacion_db_qa` | `geolocalizacion_db_prod` |
-| `ms-playlist` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `playlist_db_qa` | `playlist_db_prod` |
-| `ms-notificaciones` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `notificaciones_db_qa` | `notificaciones_db_prod` |
-| `ms-chat` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `chat_db_qa` | `chat_db_prod` |
-| `ms-pagos-suscripciones` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `pagos_db_qa` | `pagos_db_prod` |
-| `ms-estadisticas` | `https://styleradar-backend-qa.azurewebsites.net` | `https://styleradar-backend-prod.azurewebsites.net` | `estadisticas_db_qa` | `estadisticas_db_prod` |
+| `ms-inventario` | `https://styleradar-inventario-qa.azurewebsites.net` | `https://styleradar-inventario-prod.azurewebsites.net` | `inventario_db_qa` | `inventario_db_prod` |
+| `ms-item-catalogo` | `https://styleradar-catalogo-qa.azurewebsites.net` | `https://styleradar-catalogo-prod.azurewebsites.net` | `catalogo_db_qa` | `catalogo_db_prod` |
+| `ms-geolocalizacion` | `https://styleradar-geolocalizacion-qa.azurewebsites.net` | `https://styleradar-geolocalizacion-prod.azurewebsites.net` | `geolocalizacion_db_qa` | `geolocalizacion_db_prod` |
+| `ms-playlist` | `https://styleradar-playlist-qa.azurewebsites.net` | `https://styleradar-playlist-prod.azurewebsites.net` | `playlist_db_qa` | `playlist_db_prod` |
+| `ms-notificaciones` | `https://styleradar-notificaciones-qa.azurewebsites.net` | `https://styleradar-notificaciones-prod.azurewebsites.net` | `notificaciones_db_qa` | `notificaciones_db_prod` |
+| `ms-chat` | `https://gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net` | `https://gj-chat-service-prod-santi.azurewebsites.net` | `chat_db_qa` | `chat_db_prod` |
+| `ms-pagos-suscripciones` | `https://styleradar-pagos-qa.azurewebsites.net` | `https://styleradar-pagos-prod.azurewebsites.net` | `pagos_db_qa` | `pagos_db_prod` |
+| `ms-estadisticas` | `https://styleradar-estadisticas-qa.azurewebsites.net` | `https://styleradar-estadisticas-prod.azurewebsites.net` | `estadisticas_db_qa` | `estadisticas_db_prod` |
 
 ### Evidencia de Swagger OpenAPI UI Activa
 

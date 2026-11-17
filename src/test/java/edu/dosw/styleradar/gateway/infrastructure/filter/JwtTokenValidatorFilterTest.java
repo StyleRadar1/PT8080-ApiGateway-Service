@@ -224,4 +224,122 @@ class JwtTokenValidatorFilterTest {
         assertFalse(chainCalled.get(), "La ruta administrativa /actuator/gateway no debe ser accesible anónimamente");
         assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
     }
+
+    @Test
+    @DisplayName("Consulta Pública GET: Permite acceso anónimo a consultas de publicaciones (/second-hand y /donations)")
+    void isPublicRequest_permiteConsultasGetSegundaManoYDonaciones() {
+        MockServerHttpRequest getSecondHand = MockServerHttpRequest.get("/api/v1/second-hand").build();
+        MockServerHttpRequest getSecondHandDetail = MockServerHttpRequest.get("/api/v1/second-hand/prenda-123").build();
+        MockServerHttpRequest getSegundaMano = MockServerHttpRequest.get("/api/v1/segunda-mano").build();
+        MockServerHttpRequest getDonations = MockServerHttpRequest.get("/api/v1/donations").build();
+        MockServerHttpRequest getDonationsDetail = MockServerHttpRequest.get("/api/v1/donations/don-456").build();
+        MockServerHttpRequest getDonaciones = MockServerHttpRequest.get("/api/v1/donaciones").build();
+
+        assertTrue(filter.isPublicRequest(getSecondHand));
+        assertTrue(filter.isPublicRequest(getSecondHandDetail));
+        assertTrue(filter.isPublicRequest(getSegundaMano));
+        assertTrue(filter.isPublicRequest(getDonations));
+        assertTrue(filter.isPublicRequest(getDonationsDetail));
+        assertTrue(filter.isPublicRequest(getDonaciones));
+    }
+
+    @Test
+    @DisplayName("Operaciones Mutantes: Rechaza con 401 peticiones anónimas de creación, edición o donación")
+    void isPublicRequest_rechazaOperacionesMutantesSinToken() {
+        MockServerHttpRequest postSecondHand = MockServerHttpRequest.post("/api/v1/second-hand").build();
+        MockServerHttpRequest putSecondHand = MockServerHttpRequest.put("/api/v1/second-hand/prenda-123").build();
+        MockServerHttpRequest patchDonate = MockServerHttpRequest.patch("/api/v1/second-hand/prenda-123/donate").build();
+        MockServerHttpRequest postDonations = MockServerHttpRequest.post("/api/v1/donations").build();
+        MockServerHttpRequest postDonaciones = MockServerHttpRequest.post("/api/v1/donaciones").build();
+
+        assertFalse(filter.isPublicRequest(postSecondHand));
+        assertFalse(filter.isPublicRequest(putSecondHand));
+        assertFalse(filter.isPublicRequest(patchDonate));
+        assertFalse(filter.isPublicRequest(postDonations));
+        assertFalse(filter.isPublicRequest(postDonaciones));
+    }
+
+    @Test
+    @DisplayName("Filter GET Consulta Publicaciones: Acceso anónimo fluye hacia downstream sin requerir token")
+    void filter_consultaGetPublicacionesSinToken_permiteContinuar() {
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/second-hand").build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        Mono<Void> result = filter.filter(exchange, ex -> {
+            chainCalled.set(true);
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertTrue(chainCalled.get(), "La consulta GET pública debe fluir hacia downstream");
+        assertNotEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Filter Creación/Edición/Donación: Rechaza con 401 si no se envía token")
+    void filter_operacionesMutantesSinToken_retorna401Unauthorized() {
+        // 1. Creación de publicación
+        MockServerHttpRequest reqPost = MockServerHttpRequest.post("/api/v1/second-hand").build();
+        MockServerWebExchange exPost = MockServerWebExchange.from(reqPost);
+        StepVerifier.create(filter.filter(exPost, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exPost.getResponse().getStatusCode());
+
+        // 2. Edición de publicación
+        MockServerHttpRequest reqPut = MockServerHttpRequest.put("/api/v1/second-hand/prenda-100").build();
+        MockServerWebExchange exPut = MockServerWebExchange.from(reqPut);
+        StepVerifier.create(filter.filter(exPut, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exPut.getResponse().getStatusCode());
+
+        // 3. Operación de donación
+        MockServerHttpRequest reqPatch = MockServerHttpRequest.patch("/api/v1/second-hand/prenda-100/donate").build();
+        MockServerWebExchange exPatch = MockServerWebExchange.from(reqPatch);
+        StepVerifier.create(filter.filter(exPatch, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, exPatch.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Filter Creación con Token Válido: Inyecta X-User-Id y permite continuar")
+    void filter_creacionConTokenValido_inyectaHeadersYContinua() {
+        String token = Jwts.builder()
+                .subject("donante-123")
+                .claim("role", "ROLE_DONANTE")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/donations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        Mono<Void> result = filter.filter(exchange, ex -> {
+            chainCalled.set(true);
+            assertEquals("donante-123", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            assertEquals("ROLE_DONANTE", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertTrue(chainCalled.get(), "La creación con token válido debe procesarse e inyectar cabeceras");
+    }
+
+    @Test
+    @DisplayName("Constructor con rutas GET personalizadas funciona adecuadamente")
+    void constructor_conRutasGetPersonalizadas() {
+        JwtTokenValidatorFilter customFilter = new JwtTokenValidatorFilter(
+                SECRET_BASE64,
+                List.of("/custom/all/**"),
+                List.of("/custom/get/**")
+        );
+        MockServerHttpRequest getReq = MockServerHttpRequest.get("/custom/get/items").build();
+        MockServerHttpRequest postReq = MockServerHttpRequest.post("/custom/get/items").build();
+
+        assertTrue(customFilter.isPublicRequest(getReq));
+        assertFalse(customFilter.isPublicRequest(postReq));
+    }
 }
