@@ -250,14 +250,21 @@ Este diagrama modela la topología física, el confinamiento de red y la arquite
 
 ### Contrato de Integración y Dependencia Externa: Identidad de Almacén (`X-Almacen-Id`)
 
-> [!IMPORTANT]
-> **Dependencia Inter-Paquetes (Paquete 1 · Identidad / Paquete 2 · Catálogo):**
-> 1. **Anti-Spoofing Perimetral (Zero Trust):** Por política estricta de seguridad perimetral, el Gateway sanea cualquier cabecera `X-Almacen-Id`, `X-User-Id`, `X-User-Role` y `X-User-Roles` proveniente del cliente HTTP externo (evitando que un atacante suplante almacenes o usuarios ajenos).
-> 2. **Estado Actual de Emisión de Tokens (`ms-auth`):** Actualmente `ms-auth` emite tokens JWT que incluyen el `sub` numérico y la lista de `roles` (`ADMIN_ALMACEN`, `COMPRADOR`, etc.), pero no contiene los claims de almacén (`almacenId` / `storeId`), ya que la titularidad y persistencia de tiendas reside en `ms-tiendas`.
-> 3. **Contrato de Propagación de Almacén:**
->    - Si `ms-auth` o `ms-tiendas` incorporan el claim `almacenId` o `storeId` con el UUID canónico asignado al usuario (e.g. `3fa85f64-5717-4562-b3fc-2c963f66afa6`), el Gateway lo extrae criptográficamente e inyecta la cabecera `X-Almacen-Id: <UUID>` downstream hacia `ms-item-catalogo`.
->    - Si no se provee el claim firmado en el JWT, el Gateway no inventa identificadores ni confía en cabeceras cliente, reenviando la identidad autenticada `X-User-Id` y `X-User-Roles` para que Catálogo valide la titularidad contra `ms-tiendas` o a través de la ruta (`/api/v1/almacenes/{almacenId}/...`).
-> 4. **Prueba de Integración Automatizada:** Este comportamiento y la compatibilidad con UUID canónicos están cubiertos en la prueba de integración `GatewayAlmacenesRoutingAndRolesIntegrationTest.shouldDeriveAlmacenIdOnlyFromSignedClaim`.
+> [!WARNING]
+> **Dependencia Pendiente Externa (Equipo Auth / Catálogo · Bloqueante para edición y retiro de prendas):**
+> 1. **Comportamiento Actual de Catálogo:** Los endpoints de edición y retiro de prendas en `ms-item-catalogo` (`PUT /api/v1/prendas/{id}`, `DELETE /api/v1/prendas/{id}`) continúan exigiendo la cabecera `X-Almacen-Id` con formato UUID o el rol administrador. La validación interna de titularidad contra `ms-tiendas` a partir de `X-User-Id` **aún no está implementada** en el código de Catálogo y queda registrada como tarea pendiente de dicho equipo para el próximo sprint.
+> 2. **Comportamiento Actual de Auth:** El servicio `ms-auth` emite tokens JWT con `sub` (ID numérico del usuario) y lista de `roles` (`ADMIN_ALMACEN`, `COMPRADOR`, etc.), pero **no incluye** los claims `almacenId` ni `storeId`, ya que la persistencia y relación de almacenes reside en `ms-tiendas`.
+> 3. **Política Inmutable del Gateway (Zero Trust / Anti-Spoofing):** El Gateway sanea y elimina de forma estricta cualquier cabecera `X-Almacen-Id`, `X-User-Id`, `X-User-Role` y `X-User-Roles` enviada directamente por el cliente externo. El Gateway **no debe inventar identificadores de almacén ni confiar en cabeceras de cliente**.
+> 4. **Contrato Requerido a los Equipos Externos para Desbloquear la Integración:**
+>    - **Opción 1 (ms-auth):** Que `ms-auth` incorpore en el payload del JWT el claim firmado `"almacenId": "<UUID>"` al autenticar usuarios con rol `ADMIN_ALMACEN`. El Gateway ya tiene implementada y verificada la extracción de este claim en formato UUID y su inyección downstream hacia `X-Almacen-Id`.
+>    - **Opción 2 (ms-catalogo):** Que `ms-item-catalogo` elimine la dependencia estricta de `X-Almacen-Id` y valide la titularidad consultando a `ms-tiendas` con el `X-User-Id` seguro inyectado por el Gateway, o que reciba el almacén por la ruta (`/api/v1/almacenes/{almacenId}/prendas`).
+> 5. **Prueba de Integración Automatizada:** En el Gateway, este comportamiento está formalmente probado mediante `GatewayAlmacenesRoutingAndRolesIntegrationTest.shouldDeriveAlmacenIdOnlyFromSignedClaim`, garantizando que solo claims válidos firmados generen la cabecera y que las cabeceras externas no confiables sean descartadas.
+
+### Validación Pendiente en Ambiente QA: Consulta de Prendas (`GET /api/v1/prendas`)
+
+> [!NOTE]
+> **Seguimiento Post-Merge en QA:**
+> En el código y en las pruebas del Gateway se corrigió el enrutamiento y la apertura pública de `GET /api/v1/prendas`. Queda registrada como pendiente la verificación funcional en vivo en el entorno real de QA una vez desplegado el PR #3 en `develop`, para confirmar de manera definitiva con el equipo de Catálogo que el error 500 previamente observado quedó completamente subsanado y responde 200 OK de extremo a extremo.
 
 ### Tabla Oficial de Despliegue y Bases de Datos por Ambiente (Rúbrica Sprint 2)
 
