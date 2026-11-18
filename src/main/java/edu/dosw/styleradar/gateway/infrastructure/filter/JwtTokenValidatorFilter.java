@@ -45,11 +45,14 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     public static final String USER_ID_HEADER = "X-User-Id";
     public static final String USER_ROLE_HEADER = "X-User-Role";
     public static final String USER_ROLES_HEADER = "X-User-Roles";
+    public static final String ALMACEN_ID_HEADER = "X-Almacen-Id";
 
     public static final List<String> DEFAULT_PUBLIC_PATHS = List.of(
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info",
+            "/api/v1/health",
+            "/api/v1/health/**",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs",
@@ -61,7 +64,8 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/ws",
             "/ws/**",
             "/ws-chat",
-            "/ws-chat/**"
+            "/ws-chat/**",
+            "/api/v1/webhooks/**"
     );
 
     public static final List<String> DEFAULT_PUBLIC_GET_PATHS = List.of(
@@ -71,22 +75,48 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/second-hand/publications",
             "/api/v1/second-hand/publications/",
             "/api/v1/second-hand/publications/*",
+            "/api/v1/second-hand/publications/**",
+            "/api/v1/second-hand/photos",
+            "/api/v1/second-hand/photos/",
+            "/api/v1/second-hand/photos/*",
+            "/api/v1/second-hand/photos/**",
             "/api/v1/segunda-mano",
             "/api/v1/segunda-mano/",
             "/api/v1/segunda-mano/*",
             "/api/v1/segunda-mano/publicaciones",
             "/api/v1/segunda-mano/publicaciones/",
             "/api/v1/segunda-mano/publicaciones/*",
+            "/api/v1/segunda-mano/publicaciones/**",
+            "/api/v1/segunda-mano/fotos",
+            "/api/v1/segunda-mano/fotos/",
+            "/api/v1/segunda-mano/fotos/*",
+            "/api/v1/segunda-mano/fotos/**",
             "/api/v1/stores",
             "/api/v1/stores/",
             "/api/v1/stores/*",
             "/api/v1/tiendas",
             "/api/v1/tiendas/",
             "/api/v1/tiendas/*",
+            "/api/v1/catalogo",
+            "/api/v1/catalogo/",
             "/api/v1/catalogo/**",
+            "/api/v1/prendas",
+            "/api/v1/prendas/",
             "/api/v1/prendas/**",
+            "/api/v1/catalog",
+            "/api/v1/catalog/",
             "/api/v1/catalog/**",
-            "/api/v1/items/**"
+            "/api/v1/items",
+            "/api/v1/items/",
+            "/api/v1/items/**",
+            "/api/v1/almacenes",
+            "/api/v1/almacenes/*/distancia",
+            "/api/v1/almacenes/*/catalogo",
+            "/api/v1/almacenes/*/catalogo/resumen",
+            "/api/v1/almacenes/*/novedades",
+            "/api/v1/fundaciones/cercanas",
+            "/api/v1/planes",
+            "/api/v1/planes/**"
     );
 
     private final SecretKey secretKey;
@@ -142,6 +172,7 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             httpHeaders.remove(USER_ID_HEADER);
             httpHeaders.remove(USER_ROLE_HEADER);
             httpHeaders.remove(USER_ROLES_HEADER);
+            httpHeaders.remove(ALMACEN_ID_HEADER);
         });
 
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
@@ -196,11 +227,19 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
                 if (userId != null && !userId.isBlank()) {
                     requestBuilder.header(USER_ID_HEADER, userId);
                 }
-                if (role != null && !role.isBlank()) {
-                    requestBuilder.header(USER_ROLE_HEADER, role);
+                // Homologacion de roles: Auth emite ADMIN_STYLERADAR; Catalogo espera ADMIN en X-User-Role
+                String downstreamRole = normalizeDownstreamRole(role, rolesStr);
+                String downstreamRoles = normalizeDownstreamRoles(rolesStr);
+                if (downstreamRole != null && !downstreamRole.isBlank()) {
+                    requestBuilder.header(USER_ROLE_HEADER, downstreamRole);
                 }
-                if (rolesStr != null && !rolesStr.isBlank()) {
-                    requestBuilder.header(USER_ROLES_HEADER, rolesStr);
+                if (downstreamRoles != null && !downstreamRoles.isBlank()) {
+                    requestBuilder.header(USER_ROLES_HEADER, downstreamRoles);
+                }
+                // X-Almacen-Id solo se deriva de claims firmados del JWT, nunca del cliente
+                String almacenId = extractAlmacenId(claims);
+                if (almacenId != null) {
+                    requestBuilder.header(ALMACEN_ID_HEADER, almacenId);
                 }
 
                 log.debug("[Gateway] Token JWT validado exitosamente. Usuario: {}, Rol: {}, Roles: {}", userId, role, rolesStr);
@@ -256,6 +295,58 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             return false;
         }
         return publicGetPaths.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
+    }
+
+    private static boolean isStyleRadarAdmin(String roleToken) {
+        if (roleToken == null) {
+            return false;
+        }
+        String r = roleToken.trim().toUpperCase();
+        return r.equals("ADMIN_STYLERADAR") || r.equals("ROLE_ADMIN_STYLERADAR");
+    }
+
+    /** Auth emite ADMIN_STYLERADAR; Catalogo espera ADMIN en X-User-Role. Los demas roles se conservan intactos. */
+    static String normalizeDownstreamRole(String role, String rolesStr) {
+        if (isStyleRadarAdmin(role)) {
+            return "ADMIN";
+        }
+        if (rolesStr != null) {
+            for (String token : rolesStr.split("[,\\s]+")) {
+                if (isStyleRadarAdmin(token)) {
+                    return "ADMIN";
+                }
+            }
+        }
+        return role;
+    }
+
+    /** Conserva los roles originales y agrega el alias ADMIN cuando existe ADMIN_STYLERADAR. */
+    static String normalizeDownstreamRoles(String rolesStr) {
+        if (rolesStr == null || rolesStr.isBlank()) {
+            return rolesStr;
+        }
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        boolean admin = false;
+        for (String token : rolesStr.split("[,\\s]+")) {
+            if (token.isBlank()) {
+                continue;
+            }
+            out.add(token.trim());
+            admin |= isStyleRadarAdmin(token);
+        }
+        if (admin) {
+            out.add("ADMIN");
+        }
+        return String.join(",", out);
+    }
+    static String extractAlmacenId(Claims claims) {
+        for (String key : new String[]{"almacenId", "almacen_id", "storeId", "store_id"}) {
+            Object raw = claims.get(key);
+            if (raw != null && raw.toString().matches("[A-Za-z0-9_-]{1,64}")) {
+                return raw.toString();
+            }
+        }
+        return null;
     }
 
     private Mono<Void> onError(ServerWebExchange exchange, String message, HttpStatus status) {

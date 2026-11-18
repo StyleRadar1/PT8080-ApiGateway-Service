@@ -288,6 +288,13 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicRequest(getPublicaciones), "GET /segunda-mano/publicaciones debe ser público");
         assertTrue(filter.isPublicRequest(getPublicacionDetail), "GET /segunda-mano/publicaciones/{id} debe ser público");
 
+        MockServerHttpRequest getHealth = MockServerHttpRequest.get("/api/v1/health").build();
+        MockServerHttpRequest getSubPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications/category/shirts").build();
+        MockServerHttpRequest getPhotos = MockServerHttpRequest.get("/api/v1/second-hand/photos").build();
+        assertTrue(filter.isPublicRequest(getHealth), "GET /api/v1/health debe ser público");
+        assertTrue(filter.isPublicRequest(getSubPublications), "GET /second-hand/publications/** debe ser público");
+        assertTrue(filter.isPublicRequest(getPhotos), "GET /second-hand/photos debe ser público");
+
         // Rutas privadas del microservicio: consultas por usuario
         MockServerHttpRequest getUserSecondHand = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
         MockServerHttpRequest getUserPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications/users/101").build();
@@ -317,6 +324,9 @@ class JwtTokenValidatorFilterTest {
         assertFalse(filter.isPublicRequest(getDonacionesDetail), "GET /donaciones/{id} es privado");
         assertFalse(filter.isPublicRequest(getDonacionesDonor), "GET /donaciones/donor/{id} es privado");
         assertFalse(filter.isPublicRequest(getDonacionesFoundation), "GET /donaciones/foundation/{id} es privado");
+
+        MockServerHttpRequest getRepresentative = MockServerHttpRequest.get("/api/v1/donations/foundations/representative").build();
+        assertFalse(filter.isPublicRequest(getRepresentative), "GET /donations/foundations/representative es privado (requiere token)");
     }
 
     @Test
@@ -508,5 +518,151 @@ class JwtTokenValidatorFilterTest {
 
         assertTrue(customFilter.isPublicRequest(getReq));
         assertFalse(customFilter.isPublicRequest(postReq));
+    }
+
+    @Test
+    @DisplayName("Constructor con clave plana (no Base64) o secreta inválida")
+    void constructor_conClavePlanaYValidaciones() {
+        String plainSecret = "SuperSecretPlainStringThatIsAtLeast32BytesLong!";
+        JwtTokenValidatorFilter plainFilter = new JwtTokenValidatorFilter(plainSecret, null, null);
+        assertNotNull(plainFilter);
+
+        assertThrows(IllegalStateException.class, () -> new JwtTokenValidatorFilter(null));
+        assertThrows(IllegalStateException.class, () -> new JwtTokenValidatorFilter("   "));
+    }
+
+    @Test
+    @DisplayName("normalizeDownstreamRole y normalizeDownstreamRoles: Homologación exacta de ADMIN_STYLERADAR")
+    void testNormalizeDownstreamRolesAndRole() {
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ADMIN_STYLERADAR", "ADMIN_STYLERADAR"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ROLE_ADMIN_STYLERADAR", "ROLE_ADMIN_STYLERADAR"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("COMPRADOR", "COMPRADOR,ADMIN_STYLERADAR"));
+        assertEquals("COMPRADOR", JwtTokenValidatorFilter.normalizeDownstreamRole("COMPRADOR", "COMPRADOR,USER"));
+        assertNull(JwtTokenValidatorFilter.normalizeDownstreamRole(null, null));
+
+        assertNull(JwtTokenValidatorFilter.normalizeDownstreamRoles(null));
+        assertEquals("", JwtTokenValidatorFilter.normalizeDownstreamRoles(""));
+        assertEquals("COMPRADOR,ADMIN_STYLERADAR,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR,ADMIN_STYLERADAR"));
+        assertEquals("COMPRADOR,ADMIN_STYLERADAR,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR, ,ADMIN_STYLERADAR"));
+        assertEquals("COMPRADOR,USER", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR,USER"));
+    }
+
+    @Test
+    @DisplayName("Filter con claim roles como String (no lista): Inyecta cabeceras correctamente")
+    void testFilterWithRolesClaimAsString() {
+        String token = Jwts.builder()
+                .subject("simple-user-888")
+                .claim("roles", "COMPRADOR")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/try-on/cuotas")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, ex -> {
+            assertEquals("COMPRADOR", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER));
+            assertEquals("COMPRADOR", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+    }
+
+    @Test
+    @DisplayName("extractAlmacenId: Extrae storeId/almacenId de claims válidos y rechaza malformados")
+    void testExtractAlmacenIdFromClaims() {
+        io.jsonwebtoken.Claims claims1 = Jwts.claims().add("almacenId", "ALM-101").build();
+        assertEquals("ALM-101", JwtTokenValidatorFilter.extractAlmacenId(claims1));
+
+        io.jsonwebtoken.Claims claims2 = Jwts.claims().add("almacen_id", "ALM-102").build();
+        assertEquals("ALM-102", JwtTokenValidatorFilter.extractAlmacenId(claims2));
+
+        io.jsonwebtoken.Claims claims3 = Jwts.claims().add("storeId", "STORE-201").build();
+        assertEquals("STORE-201", JwtTokenValidatorFilter.extractAlmacenId(claims3));
+
+        io.jsonwebtoken.Claims claims4 = Jwts.claims().add("store_id", "STORE-202").build();
+        assertEquals("STORE-202", JwtTokenValidatorFilter.extractAlmacenId(claims4));
+
+        String sampleUuid = java.util.UUID.randomUUID().toString();
+        io.jsonwebtoken.Claims claimsUuid = Jwts.claims().add("almacenId", sampleUuid).build();
+        assertEquals(sampleUuid, JwtTokenValidatorFilter.extractAlmacenId(claimsUuid));
+
+        io.jsonwebtoken.Claims claimsInvalid = Jwts.claims().add("almacenId", "INVALID@@@$$").build();
+        assertNull(JwtTokenValidatorFilter.extractAlmacenId(claimsInvalid));
+
+        io.jsonwebtoken.Claims claimsEmpty = Jwts.claims().build();
+        assertNull(JwtTokenValidatorFilter.extractAlmacenId(claimsEmpty));
+    }
+
+    @Test
+    @DisplayName("isPublicRequest: Cobertura exhaustiva de ramas nulas, OPTIONS y rutas excluidas")
+    void testIsPublicRequestBranches() {
+        assertFalse(filter.isPublicRequest(null));
+        assertFalse(filter.isPublicPath(null));
+        assertFalse(filter.isPublicGetPath(null));
+
+        MockServerHttpRequest optReq = MockServerHttpRequest.options("/api/v1/any/endpoint").build();
+        assertTrue(filter.isPublicRequest(optReq));
+
+        MockServerHttpRequest prendasReq = MockServerHttpRequest.get("/api/v1/prendas").build();
+        assertTrue(filter.isPublicRequest(prendasReq), "GET /api/v1/prendas debe ser público");
+        MockServerHttpRequest prendasSlashReq = MockServerHttpRequest.get("/api/v1/prendas/").build();
+        assertTrue(filter.isPublicRequest(prendasSlashReq), "GET /api/v1/prendas/ debe ser público");
+        MockServerHttpRequest catalogoReq = MockServerHttpRequest.get("/api/v1/catalogo").build();
+        assertTrue(filter.isPublicRequest(catalogoReq), "GET /api/v1/catalogo debe ser público");
+        MockServerHttpRequest catalogoSlashReq = MockServerHttpRequest.get("/api/v1/catalogo/").build();
+        assertTrue(filter.isPublicRequest(catalogoSlashReq), "GET /api/v1/catalogo/ debe ser público");
+
+        // Rutas privadas de donaciones y segunda mano
+        String[] privatePaths = {
+                "/api/v1/second-hand/publications/users/123",
+                "/api/v1/second-hand/publications/user/123",
+                "/api/v1/second-hand/user/123",
+                "/api/v1/segunda-mano/publicaciones/usuarios/123",
+                "/api/v1/segunda-mano/publicaciones/usuario/123",
+                "/api/v1/segunda-mano/user/123",
+                "/api/v1/donations/my-donations",
+                "/api/v1/donaciones/mis-donaciones"
+        };
+        for (String p : privatePaths) {
+            MockServerHttpRequest req = MockServerHttpRequest.get(p).build();
+            assertFalse(filter.isPublicGetPath(p), "Ruta " + p + " no debe ser pública");
+            assertFalse(filter.isPublicRequest(req), "Petición a " + p + " no debe ser pública");
+        }
+    }
+
+    @Test
+    @DisplayName("Filter con ADMIN_STYLERADAR y claim almacenId: Downstream recibe X-Almacen-Id legítimo y rol homologado")
+    void testFilterInjectsLegitAlmacenIdAndHomologatedRole() {
+        String token = Jwts.builder()
+                .subject("admin-user-777")
+                .claim("role", "ADMIN_STYLERADAR")
+                .claim("roles", List.of("ADMIN_STYLERADAR", "COMPRADOR"))
+                .claim("almacenId", "TIENDA-CENTRO-01")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/almacenes/TIENDA-CENTRO-01/catalogo")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Almacen-Id", "spoofed-store-id")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        Mono<Void> result = filter.filter(exchange, ex -> {
+            chainCalled.set(true);
+            assertEquals("TIENDA-CENTRO-01", ex.getRequest().getHeaders().getFirst("X-Almacen-Id"));
+            assertEquals("ADMIN", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER));
+            assertTrue(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER).contains("ADMIN"));
+            return Mono.empty();
+        });
+
+        StepVerifier.create(result).verifyComplete();
+        assertTrue(chainCalled.get());
     }
 }
