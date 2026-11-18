@@ -155,19 +155,21 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
-    @DisplayName("X-Almacen-Id: se deriva solo del claim firmado y nunca del cliente")
+    @DisplayName("X-Almacen-Id: soporta UUID canónico firmado en JWT y elimina cabeceras cliente no confiables")
     void shouldDeriveAlmacenIdOnlyFromSignedClaim() {
-        String withClaim = token("9", List.of("ADMIN_ALMACEN"), "55");
-        webTestClient.get().uri("/api/v1/almacenes/55/catalogo")
+        String canonicalUuid = java.util.UUID.randomUUID().toString();
+        String withClaim = token("9", List.of("ADMIN_ALMACEN"), canonicalUuid);
+        webTestClient.get().uri("/api/v1/almacenes/" + canonicalUuid + "/catalogo")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + withClaim)
-                .header("X-Almacen-Id", "999")
+                .header("X-Almacen-Id", "spoofed-client-uuid-999")
                 .exchange().expectStatus().isOk()
-                .expectBody().jsonPath("$.almacen").isEqualTo("55");
+                .expectBody().jsonPath("$.almacen").isEqualTo(canonicalUuid);
 
+        // Sin claim en JWT (comportamiento actual de Auth): Gateway no inventa cabecera y limpia la del cliente
         String withoutClaim = token("9", List.of("ADMIN_ALMACEN"), null);
-        webTestClient.get().uri("/api/v1/almacenes/55/catalogo")
+        webTestClient.get().uri("/api/v1/almacenes/" + canonicalUuid + "/catalogo")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + withoutClaim)
-                .header("X-Almacen-Id", "999")
+                .header("X-Almacen-Id", "spoofed-client-uuid-999")
                 .exchange().expectStatus().isOk()
                 .expectBody().jsonPath("$.almacen").isEqualTo("none");
     }

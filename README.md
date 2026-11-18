@@ -248,6 +248,17 @@ Este diagrama modela la topología física, el confinamiento de red y la arquite
 | `ms-donaciones-swagger` | Documentación | `8520` | `/v3/api-docs/donaciones`, `/v3/api-docs/donations` $\to$ `/api/v1/v3/api-docs` | No | Reescritura OpenAPI | Reescritura OpenAPI |
 | `api-gateway` | Perímetro | `8080` | `/actuator/**`, `/v3/api-docs`, `/swagger-ui.html` | N/A | `styleradar-gateway-qa` | `styleradar-gateway-prod` |
 
+### Contrato de Integración y Dependencia Externa: Identidad de Almacén (`X-Almacen-Id`)
+
+> [!IMPORTANT]
+> **Dependencia Inter-Paquetes (Paquete 1 · Identidad / Paquete 2 · Catálogo):**
+> 1. **Anti-Spoofing Perimetral (Zero Trust):** Por política estricta de seguridad perimetral, el Gateway sanea cualquier cabecera `X-Almacen-Id`, `X-User-Id`, `X-User-Role` y `X-User-Roles` proveniente del cliente HTTP externo (evitando que un atacante suplante almacenes o usuarios ajenos).
+> 2. **Estado Actual de Emisión de Tokens (`ms-auth`):** Actualmente `ms-auth` emite tokens JWT que incluyen el `sub` numérico y la lista de `roles` (`ADMIN_ALMACEN`, `COMPRADOR`, etc.), pero no contiene los claims de almacén (`almacenId` / `storeId`), ya que la titularidad y persistencia de tiendas reside en `ms-tiendas`.
+> 3. **Contrato de Propagación de Almacén:**
+>    - Si `ms-auth` o `ms-tiendas` incorporan el claim `almacenId` o `storeId` con el UUID canónico asignado al usuario (e.g. `3fa85f64-5717-4562-b3fc-2c963f66afa6`), el Gateway lo extrae criptográficamente e inyecta la cabecera `X-Almacen-Id: <UUID>` downstream hacia `ms-item-catalogo`.
+>    - Si no se provee el claim firmado en el JWT, el Gateway no inventa identificadores ni confía en cabeceras cliente, reenviando la identidad autenticada `X-User-Id` y `X-User-Roles` para que Catálogo valide la titularidad contra `ms-tiendas` o a través de la ruta (`/api/v1/almacenes/{almacenId}/...`).
+> 4. **Prueba de Integración Automatizada:** Este comportamiento y la compatibilidad con UUID canónicos están cubiertos en la prueba de integración `GatewayAlmacenesRoutingAndRolesIntegrationTest.shouldDeriveAlmacenIdOnlyFromSignedClaim`.
+
 ### Tabla Oficial de Despliegue y Bases de Datos por Ambiente (Rúbrica Sprint 2)
 
 > **Regla de Oro de la Cátedra:** QA y PROD nunca comparten base de datos. El API Gateway es un componente puramente stateless y reactivo sobre Netty, por lo que opera sin base de datos propia.
