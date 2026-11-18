@@ -201,7 +201,7 @@ spring:
         - id: ms-segunda-vida-donaciones
           uri: ${DONACIONES_SERVICE_URL:http://localhost:8520}
           predicates:
-            - Path=/api/v1/donations/**, /api/v1/second-hand/**, /api/v1/donaciones/**, /api/v1/segunda-mano/**
+            - Path=/api/v1/health, /api/v1/donations, /api/v1/donations/**, /api/v1/second-hand, /api/v1/second-hand/**, /api/v1/donaciones, /api/v1/donaciones/**, /api/v1/segunda-mano, /api/v1/segunda-mano/**
           filters:
             - name: CircuitBreaker
               args:

@@ -342,6 +342,76 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 exchange.close();
             }
         });
+
+        // 12. Endpoint mock para Health Check de Donaciones (/api/v1/health)
+        mockHttpServer.createContext("/api/v1/health", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"endpoint\":\"/api/v1/health\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 13. Endpoint mock para Fotos de Segunda Mano (/api/v1/second-hand/photos)
+        mockHttpServer.createContext("/api/v1/second-hand/photos", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String method = exchange.getRequestMethod();
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"method\":\"" + method + "\","
+                        + "\"endpoint\":\"/api/v1/second-hand/photos\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 14. Endpoint mock para Representante de Fundación (/api/v1/donations/foundations/representative)
+        mockHttpServer.createContext("/api/v1/donations/foundations/representative", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
+                String response = "{"
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
+                        + "\"endpoint\":\"/api/v1/donations/foundations/representative\","
+                        + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
+                        + "\"foundationName\":\"Fundacion Abrigo Solidario\","
+                        + "\"status\":\"UP\""
+                        + "}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
     }
 
     @AfterAll
@@ -723,5 +793,48 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-notificaciones")
                 .jsonPath("$.receivedUserId").isEqualTo("user-101");
+    }
+
+    @Test
+    @DisplayName("Integración Enrutamiento: GET /api/v1/health es público y se enruta a ms-segunda-vida-donaciones")
+    void shouldRoutePublicHealthCheckToDonaciones() {
+        webTestClient.get()
+                .uri("/api/v1/health")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.endpoint").isEqualTo("/api/v1/health");
+    }
+
+    @Test
+    @DisplayName("Integración Enrutamiento: POST /api/v1/second-hand/photos se enruta a Donaciones con token")
+    void shouldRouteSecondHandPhotosWithToken() {
+        String token = generateValidToken("user-seller-202", "ROLE_CLIENTE");
+
+        webTestClient.post()
+                .uri("/api/v1/second-hand/photos")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.receivedUserId").isEqualTo("user-seller-202");
+    }
+
+    @Test
+    @DisplayName("Integración Enrutamiento: GET /api/v1/donations/foundations/representative se enruta con titularidad de usuario autenticado")
+    void shouldRouteDonationsRepresentativeWithValidToken() {
+        String token = generateValidToken("user-rep-505", "REPRESENTANTE_FUNDACION");
+
+        webTestClient.get()
+                .uri("/api/v1/donations/foundations/representative")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.receivedUserId").isEqualTo("user-rep-505")
+                .jsonPath("$.foundationName").isEqualTo("Fundacion Abrigo Solidario");
     }
 }

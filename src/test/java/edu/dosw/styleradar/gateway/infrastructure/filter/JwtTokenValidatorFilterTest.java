@@ -288,6 +288,13 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicRequest(getPublicaciones), "GET /segunda-mano/publicaciones debe ser público");
         assertTrue(filter.isPublicRequest(getPublicacionDetail), "GET /segunda-mano/publicaciones/{id} debe ser público");
 
+        MockServerHttpRequest getHealth = MockServerHttpRequest.get("/api/v1/health").build();
+        MockServerHttpRequest getSubPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications/category/shirts").build();
+        MockServerHttpRequest getPhotos = MockServerHttpRequest.get("/api/v1/second-hand/photos").build();
+        assertTrue(filter.isPublicRequest(getHealth), "GET /api/v1/health debe ser público");
+        assertTrue(filter.isPublicRequest(getSubPublications), "GET /second-hand/publications/** debe ser público");
+        assertTrue(filter.isPublicRequest(getPhotos), "GET /second-hand/photos debe ser público");
+
         // Rutas privadas del microservicio: consultas por usuario
         MockServerHttpRequest getUserSecondHand = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
         MockServerHttpRequest getUserPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications/users/101").build();
@@ -317,6 +324,9 @@ class JwtTokenValidatorFilterTest {
         assertFalse(filter.isPublicRequest(getDonacionesDetail), "GET /donaciones/{id} es privado");
         assertFalse(filter.isPublicRequest(getDonacionesDonor), "GET /donaciones/donor/{id} es privado");
         assertFalse(filter.isPublicRequest(getDonacionesFoundation), "GET /donaciones/foundation/{id} es privado");
+
+        MockServerHttpRequest getRepresentative = MockServerHttpRequest.get("/api/v1/donations/foundations/representative").build();
+        assertFalse(filter.isPublicRequest(getRepresentative), "GET /donations/foundations/representative es privado (requiere token)");
     }
 
     @Test
