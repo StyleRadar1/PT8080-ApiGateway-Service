@@ -17,10 +17,16 @@ El API Gateway está construido sobre **Spring Cloud Gateway** y **Project React
 Este diagrama presenta la visión arquitectónica global de StyleRadar y delimita el rol estratégico del **API Gateway** como frontera perimetral del sistema:
 
 * **Punto Único de Entrada Perimetral (Single Point of Entry):** Todas las solicitudes emitidas desde la aplicación cliente (`StyleRadar Client Web App`) ingresan de forma obligatoria y exclusiva a través del **API Gateway** en el puerto `8080`. Ningún cliente externo posee visibilidad directa ni acceso a las direcciones IP o puertos de la red interna.
-* **Ocultamiento de Topología Interna y Reverse Proxy:** El Gateway enruta el tráfico hacia el ecosistema de 13 microservicios (`ms-auth` en `:8100`, `ms-usuarios` en `:8120`, `ms-tiendas` en `:8140`, `ms-notificaciones` en `:8300`, `ms-inventario` en `:8200`, `ms-itemcatalogo` en `:8220`, `ms-segunda-vida` en `:8280`, `ms-chat` en `:8320`, `ms-playlist` en `:8260`, `ms-pagos` en `:8400`, `ms-geolocalizacion` en `:8240`, `ms-probador-virtual` en `:8500` y `ms-estadisticas` en `:8420`). Gracias a este enrutamiento perimetral, los microservicios downstream pueden evolucionar, escalar o cambiar de dirección interna sin impactar el contrato consumido por el frontend.
-* **Naturaleza Stateless vs. Aislamiento de Persistencia (*Database-per-Service*):** Mientras cada microservicio de negocio gestiona su propia base de datos relacional PostgreSQL de manera 100% aislada (`usuarios_db`, `tiendas_db`, `catalogo_db`, `probador_db`, etc.), el API Gateway es un componente **completamente sin estado (stateless)**. No persiste registros en disco ni compite por bloqueos de base de datos, lo que le permite maximizar el rendimiento reactivo no bloqueante de Netty y escalar horizontalmente bajo picos de tráfico masivo.
-* **Aceleración en Memoria y Desacoplamiento Asíncrono:** Los microservicios consumen instancias de **Redis** para caching de alta velocidad y colas en **RabbitMQ** para procesamiento de eventos en segundo plano (notificaciones, analítica, transacciones). El API Gateway opera en una capa superior a esta mensajería, procesando únicamente tráfico HTTP/WebSocket síncrono perimetral de alta concurrencia.
-* **Frontera de Servicios Externos (SaaS):** Las integraciones de terceros (Google OAuth, MercadoPago API, Azure Blob Storage y FASHN AI API) son consumidas internamente por los microservicios dueños de cada dominio. El Gateway actúa como escudo protector, evitando que llamadas externas no autorizadas puedan comprometer los conectores de infraestructura del sistema.
+* **Ocultamiento de Topología Interna y Reverse Proxy:** El Gateway enruta el tráfico hacia el ecosistema de 13 microservicios autónomos bajo nomenclatura estandarizada:
+  - **Paquete 1 (Identidad):** `ms-Auth` (:8100), `ms-Users` (:8120) y `ms-Stores` (:8140).
+  - **Paquete 2 (Catálogo):** `ms-Inventory` (:8200), `ms-ItemCatalog` (:8220), `ms-Playlist` (:8260) y `ms-Geolocation` (:8240).
+  - **Paquete 3 (Mensajería y Notificaciones):** `ms-Notifications` (:8300) y `ms-Chat` (:8320 con soporte WebSocket).
+  - **Paquete 4 (Financiero y Analítica):** `ms-Payment` (:8400) y `ms-Statistics` (:8420).
+  - **Paquete 5 (Experiencia y Moda Sostenible):** `ms-VirtualTryOn` (:8500) y `ms-Donations` (:8520).
+  Gracias a este enrutamiento perimetral basado en contratos síncronos UML 2.5 (`API Gateway ---) (O--- ms-*`), los microservicios downstream pueden evolucionar, escalar o migrar de infraestructura interna sin impactar el contrato consumido por el frontend.
+* **Naturaleza Stateless vs. Aislamiento de Persistencia (*Database-per-Service*):** Mientras los microservicios de negocio gestionan su propia base de datos relacional PostgreSQL de manera 100% aislada en 12 esquemas independientes (`users_db`, `stores_db`, `notifications_db`, `inventory_db`, `catalog_db`, `donations_db`, `chat_db`, `playlist_db`, `payments_db`, `geo_db`, `virtual_try_on_db` y `statistics_db`; `ms-Auth` no requiere base relacional al delegar sesiones en tokens y caché), el API Gateway es un componente **completamente sin estado (stateless)**. No persiste registros en disco ni compite por bloqueos de base de datos, lo que le permite maximizar el rendimiento reactivo no bloqueante de Netty y escalar horizontalmente bajo picos de tráfico masivo.
+* **Aceleración en Memoria y Desacoplamiento Asíncrono:** Los microservicios consumen instancias de **Redis** para caching de alta velocidad (bases `Auth`, `Payment`, `Chat`, `Statistics` y `Virtual Try-on`) y colas dedicadas en **RabbitMQ** (`RabbitMQ Usuarios`, `RabbitMQ Notificaciones`, `RabbitMQ ItemCatalogo`, `RabbitMQ Pagos`, `RabbitMQ Geolocalizacion`, `RabbitMQ Estadisticas`) para procesamiento distribuido de eventos en segundo plano. El API Gateway opera en una capa superior a esta mensajería, procesando únicamente tráfico HTTP/WebSocket síncrono perimetral de alta concurrencia.
+* **Frontera de Servicios Externos (SaaS):** Las integraciones de terceros (`Google OAuth` para identidad, `MercadoPago API` para pagos, `Azure Blob Storage` para activos multimedia y `FASHN AI API` para inferencia generativa) son consumidas internamente por los microservicios dueños de cada dominio. El Gateway actúa como escudo protector, evitando que llamadas externas no autorizadas puedan comprometer los conectores de infraestructura del sistema.
 
 #### 2.2 Diagrama de Flujo y Cadena de Filtros Reactivos
 
@@ -72,37 +78,49 @@ Este diagrama modela la interacción temporal del flujo de peticiones que cruzan
 
 Este diagrama modela la topología física, el confinamiento de red y la arquitectura de infraestructura en la nube para la solución integral **StyleRadar**, destacando la posición estratégica del **API Gateway** como centinela de seguridad perimetral:
 
-* **1. Zona Pública / DMZ y Clientes Externos (`«device» Client Workstation / Mobile`):**
-  - Los usuarios compradores, almacenes aliados, fundaciones y administradores acceden al sistema desde navegadores web (SPA React alojada en Vercel) y aplicaciones móviles (Android / iOS).
-  - Todo el tráfico cliente viaja obligatoriamente a través de conexiones seguras cifradas con **HTTPS / TLS 1.3** hacia el nombre de dominio oficial o endpoint de Azure App Service (`:8080`).
-  - Ningún cliente exterior conoce ni puede alcanzar directamente las IPs privadas ni los puertos de los microservicios de negocio.
+* **1. Zona de Cliente y Acceso Público (`«Device» Client / User Device`):**
+  - Los usuarios compradores, comercios aliados y administradores acceden al sistema a través de su navegador web (`«Execution Environment» Web Browser`), el cual ejecuta el artefacto cliente `«Artifact» Web Application (React / Vite)`.
+  - Todo el tráfico cliente viaja de forma obligatoria y cifrada a través de protocolos seguros **`HTTPS :443`** (para llamadas HTTP REST) y **`WSS :8080`** (WebSockets reactivos) hacia el puerto público `:8080` del **API Gateway**.
+  - Ningún cliente exterior conoce ni puede alcanzar directamente las IPs privadas ni los puertos internos de la malla de microservicios.
 
-* **2. Perímetro de Entrada e Ingress Público (`«container» api-gateway`):**
-  - El **API Gateway** se ejecuta como un contenedor OCI basado en `eclipse-temurin:21-jre-alpine` bajo el proceso no privilegiado `gateway (UID 10001)`.
-  - Es el **único contenedor con Ingress público expuesto** (puerto `8080`) en todo el entorno en la nube (`StyleRadar Cloud Environment`).
-  - Asume la terminación TLS, la negociación de políticas CORS (`GlobalCorsFilter`), la inyección de correlación y telemetría (`GlobalRequestLoggingFilter`), y el control estricto de autenticación perimetral (`JwtTokenValidatorFilter`).
-  - Cuenta con mitigación activa frente a la vulnerabilidad CVE-2025-41243 (endpoint administrativo `/actuator/gateway` completamente deshabilitado y protegido).
-  - La sonda de salud de Azure PaaS (`Liveness/Readiness Probe`) supervisa el contenedor cada 30 segundos a través de `/actuator/health`.
+* **2. Entorno de Ejecución en Contenedores (`«Execution Environment» Azure Container Apps Environment`):**
+  - **`«Container App» API Gateway :8080`:** Es el **único contenedor con Ingress público expuesto** (`:8080`) en todo el entorno en la nube. Asume la terminación TLS, la negociación de políticas CORS (`GlobalCorsFilter`), la inyección de correlación y telemetría (`GlobalRequestLoggingFilter`), y el control estricto de autenticación perimetral (`JwtTokenValidatorFilter`).
+  - **Malla de 13 Microservicios (`«Container App»`):** Residen en una red confinada privada sin exposición pública, comunicándose con el API Gateway mediante enlaces HTTP síncronos directos en sus respectivos puertos:
+    - **`ms-Auth :8100`** (`HTTP :8100`) — Autenticación federada, emisión y validación de tokens.
+    - **`ms-Users :8120`** (`HTTP :8120`) — Gestión de perfiles, roles y medidas biométricas.
+    - **`ms-Stores :8140`** (`HTTP :8140`) — Gestión de comercios aliados y catálogos de tiendas.
+    - **`ms-Inventory :8200`** (`HTTP :8200`) — Control de existencias de prendas y stock en tiempo real.
+    - **`ms-Playlist :8260`** (`HTTP :8260`) — Playlists de moda, tendencias y recomendaciones.
+    - **`ms-Geolocation :8240`** (`HTTP :8240`) — Localización geográfica de tiendas y cálculo de cercanía.
+    - **`ms-Chat :8320`** (`HTTP :8320`) — Mensajería interactiva cliente-comercio.
+    - **`ms-Statistics :8420`** (`HTTP :8420`) — Métricas de interacción, telemetría y analítica de negocio.
+    - **`ms-ItemCatalog :8220`** (`HTTP :8220`) — Fichas técnicas de prendas y prendas disponibles.
+    - **`ms-VirtualTryOn :8500`** (`HTTP :8500`) — Orquestación de probador virtual con IA generativa y cuotas.
+    - **`ms-Payment :8400`** (`HTTP :8400`) — Pasarela de cobros, suscripciones y transacciones.
+    - **`ms-Donations :8520`** (`HTTP :8520`) — Gestión de donaciones de ropa y economía circular *(puerto diferenciado, resolviendo colisiones previas)*.
+    - **`ms-Notifications :8300`** (`HTTP :8300`) — Notificaciones push y correos transaccionales.
 
-* **3. Malla Confinada de Microservicios (`«network» styleradar-network / Azure VNet`):**
-  - Los 13 microservicios residen en una red virtual privada y aislada (Azure VNet / Docker Bridge confinada), sin mapeo de puertos hacia la interfaz pública del Host.
-  - La comunicación entre el Gateway y los microservicios downstream es directa, interna y de ultra-baja latencia (< 5 ms):
-    - **Paquete 1: Identidad (CADche · Bloque 8100):** `ms-auth` (:8100), `ms-usuarios` (:8120) y `ms-tiendas` (:8140).
-    - **Paquete 2: Catálogo (RESTrepo · Bloque 8200):** `ms-inventario` (:8200), `ms-item-catalogo` (:8220), `ms-geolocalizacion` (:8240) y `ms-playlist` (:8260).
-    - **Paquete 3: Mensajería y Notificaciones (Guatoque · Bloque 8300):** `ms-notificaciones` (:8300) y `ms-chat` (:8320 con soporte WebSocket/STOMP).
-    - **Paquete 4: Pagos y Analítica (NQS · Bloque 8400):** `ms-pagos-suscripciones` (:8400) y `ms-estadisticas` (:8420).
-    - **Paquete 5: Experiencia y Moda Sostenible (Portal 8080 · Bloque 8500):** `ms-probador-virtual` (:8500) y `ms-segunda-vida-donaciones` (:8520).
-  - Los circuitos de falla de Resilience4j protegen al Gateway de microservicios con lentitud o caídas, degradando elegantemente hacia el `FallbackController` interno (`HTTP 503 RFC 7807`).
+* **3. Persistencia Relacional Dedicada (`«Execution Environment» Azure Database for PostgreSQL` · `:5432`):**
+  - Siguiendo el patrón *Database-per-Service*, un servidor PostgreSQL gestionado aloja **12 bases de datos lógicas independientes** conectadas mediante **`TCP :5432`**:
+    `users_db`, `stores_db`, `notifications_db`, `inventory_db`, `catalog_db`, `donations_db`, `chat_db`, `playlist_db`, `payments_db`, `geo_db`, `virtual_try_on_db` y `statistics_db`.
+  - Cada microservicio con persistencia relacional accede estrictamente a su base de datos asignada. `ms-Auth` no requiere base de datos relacional al gestionar sesiones en caché y validar tokens criptográficos.
 
-* **4. Desacoplamiento de Persistencia (*Database-per-Service*) y Asincronía:**
-  - Siguiendo los principios de microservicios limpios, cada componente posee su propia base de datos relacional independiente en **Azure Database for PostgreSQL** (`auth_db`, `usuarios_db`, `tiendas_db`, `catalogo_db`, `probador_db`, `donaciones_db`, etc.). Está estrictamente prohibido el acceso cruzado entre esquemas.
-  - **Redis** provee almacenamiento en memoria para sesiones, contadores en tiempo real y candados de concurrencia e idempotencia.
-  - **RabbitMQ / Kafka** orquesta los eventos asíncronos desacoplados (`StockChangedEvent`, `PagoConfirmadoEvent`, `DonationStatusEvent`).
-  - **Naturaleza 100% Stateless del Gateway:** Al no poseer base de datos propia ni conexiones directas a los brokers de eventos, el Gateway mantiene una huella de memoria ultraligera (~150 MB de RAM), arranques en frío en menos de 3 segundos y capacidad de autoscaling horizontal elástico inmediato ante variaciones de demanda.
+* **4. Aceleración en Memoria (`«Execution Environment» Azure Cache for Redis` · `:6379`):**
+  - Clúster en memoria conectado mediante protocolo **`RESP :6379`** por los microservicios con requerimientos de latencia ultrabaja:
+    - `ms-Auth` (sesiones y blacklist de tokens)
+    - `ms-Payment` (idempotencia transaccional y bloqueos de cobro)
+    - `ms-Chat` (presencia y estados de conexión)
+    - `ms-Statistics` (contadores en tiempo real)
+    - `ms-VirtualTryOn` (cuotas de usuario y bloqueos de renderizado)
 
-* **5. Frontera Segura con Proveedores SaaS:**
-  - Los proveedores externos de software como servicio (**Azure Blob Storage** para almacenamiento de imágenes, **Google Identity** para OAuth2, **Mercado Pago** para pasarela de pagos y **FASHN AI** para generación generativa VTON) son consumidos exclusivamente desde los microservicios especializados de backend.
-  - Esta topología garantiza que el Gateway jamás almacene credenciales de terceros ni exponga claves de API de servicios externos en sus capas perimetrales.
+* **5. Broker de Mensajería Asíncrona (`«Execution Environment» RabbitMQ Message Broker` · `:5672`):**
+  - Servidor de mensajería conectado mediante protocolo **`AMQP :5672`** con los **13 microservicios**, orquestando la publicación y consumo desacoplado de eventos del dominio sin sobrecargar la capa síncrona del Gateway.
+
+* **6. Proveedores y Servicios Externos en la Nube (SaaS · `HTTPS :443`):**
+  - **`Google OAuth 2.0` (`«External System»`):** Consumido por `ms-Auth` para inicio de sesión federado.
+  - **`Azure Blob Storage` (`«Cloud Service»`):** Consumido por `ms-Stores`, `ms-Donations` y `ms-VirtualTryOn` para almacenamiento seguro de imágenes.
+  - **`FASHN AI` (`«External AI API»`):** Consumido por `ms-VirtualTryOn` para inferencia generativa neuronal de prendas.
+  - **`Mercado Pago API` (`«External System»`):** Consumido por `ms-Payment` para procesamiento de pagos y suscripciones.
 
 ---
 
