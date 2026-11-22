@@ -223,6 +223,10 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicPath("/v3/api-docs/probador"));
         assertTrue(filter.isPublicPath("/api/v1/auth/login"));
         assertTrue(filter.isPublicPath("/api/v1/auth/register"));
+        assertTrue(filter.isPublicPath("/api/v1/auth/otp/verify"));
+        assertTrue(filter.isPublicPath("/api/v1/auth/oauth2/google"));
+        assertFalse(filter.isPublicPath("/api/v1/auth/logout"));
+        assertFalse(filter.isPublicPath("/api/v1/auth/logout/all"));
         assertTrue(filter.isPublicPath("/fallback/probador"));
         assertTrue(filter.isPublicPath("/ws"));
         assertTrue(filter.isPublicPath("/ws/chat"));
@@ -536,6 +540,9 @@ class JwtTokenValidatorFilterTest {
     void testNormalizeDownstreamRolesAndRole() {
         assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ADMIN_STYLERADAR", "ADMIN_STYLERADAR"));
         assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ROLE_ADMIN_STYLERADAR", "ROLE_ADMIN_STYLERADAR"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("STYLERADAR_ADMIN", "STYLERADAR_ADMIN"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ROLE_STYLERADAR_ADMIN", "ROLE_STYLERADAR_ADMIN"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("BUYER", "BUYER,STYLERADAR_ADMIN"));
         assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("COMPRADOR", "COMPRADOR,ADMIN_STYLERADAR"));
         assertEquals("COMPRADOR", JwtTokenValidatorFilter.normalizeDownstreamRole("COMPRADOR", "COMPRADOR,USER"));
         assertNull(JwtTokenValidatorFilter.normalizeDownstreamRole(null, null));
@@ -543,6 +550,7 @@ class JwtTokenValidatorFilterTest {
         assertNull(JwtTokenValidatorFilter.normalizeDownstreamRoles(null));
         assertEquals("", JwtTokenValidatorFilter.normalizeDownstreamRoles(""));
         assertEquals("COMPRADOR,ADMIN_STYLERADAR,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR,ADMIN_STYLERADAR"));
+        assertEquals("BUYER,STYLERADAR_ADMIN,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("BUYER,STYLERADAR_ADMIN"));
         assertEquals("COMPRADOR,ADMIN_STYLERADAR,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR, ,ADMIN_STYLERADAR"));
         assertEquals("COMPRADOR,USER", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR,USER"));
     }
@@ -614,6 +622,16 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicRequest(catalogoReq), "GET /api/v1/catalogo debe ser público");
         MockServerHttpRequest catalogoSlashReq = MockServerHttpRequest.get("/api/v1/catalogo/").build();
         assertTrue(filter.isPublicRequest(catalogoSlashReq), "GET /api/v1/catalogo/ debe ser público");
+        MockServerHttpRequest storesReq = MockServerHttpRequest.get("/api/v1/stores").build();
+        assertTrue(filter.isPublicRequest(storesReq), "GET /api/v1/stores debe ser público");
+        MockServerHttpRequest storesNitReq = MockServerHttpRequest.get("/api/v1/stores/900555777-1").build();
+        assertTrue(filter.isPublicRequest(storesNitReq), "GET /api/v1/stores/{nit} debe ser público");
+        MockServerHttpRequest storePhotosReq = MockServerHttpRequest.get("/api/v1/stores/900555777-1/photos").build();
+        assertTrue(filter.isPublicRequest(storePhotosReq), "GET /api/v1/stores/{nit}/photos debe ser público");
+        MockServerHttpRequest postStorePhotosReq = MockServerHttpRequest.post("/api/v1/stores/900555777-1/photos").build();
+        assertFalse(filter.isPublicRequest(postStorePhotosReq), "POST /api/v1/stores/{nit}/photos no debe ser público");
+        MockServerHttpRequest foundationsReq = MockServerHttpRequest.get("/api/v1/foundations").build();
+        assertTrue(filter.isPublicRequest(foundationsReq), "GET /api/v1/foundations debe ser público");
 
         // Rutas privadas de donaciones y segunda mano
         String[] privatePaths = {

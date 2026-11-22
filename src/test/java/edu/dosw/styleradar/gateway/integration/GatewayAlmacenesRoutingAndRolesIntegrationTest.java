@@ -24,6 +24,8 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 /**
  * Verifica el enrutamiento de /api/v1/almacenes/** (Geolocalizacion, Catalogo y Tiendas con prioridad correcta)
  * y la homologacion de roles / X-Almacen-Id hacia los microservicios downstream.
@@ -182,23 +184,66 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
-    @DisplayName("Pagos: rutas reales publicadas por ms-pagos llegan a Pagos (incluido /admin/pagos sobre /admin/**)")
+    @DisplayName("Pagos: rutas reales en español e inglés llegan a Pagos y admin/payments exige rol ADMIN_STYLERADAR")
     void shouldRoutePagosRealPaths() {
-        String token = token("7", List.of("ADMIN_STYLERADAR"), null);
-        for (String uri : List.of("/api/v1/suscripciones/5", "/api/v1/pagos/historial", "/api/v1/admin/pagos")) {
-            webTestClient.get().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
-                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
+        String adminToken = token("7", List.of("STYLERADAR_ADMIN"), null);
+        for (String uri : List.of(
+                "/api/v1/suscripciones/5",
+                "/api/v1/subscriptions/5",
+                "/api/v1/pagos/historial",
+                "/api/v1/payments/history",
+                "/api/v1/plans",
+                "/api/v1/admin/pagos",
+                "/api/v1/admin/payments"
+        )) {
+            webTestClient.get().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken).exchange()
+                    .expectStatus().isOk().expectBody()
+                    .jsonPath("$.service").isEqualTo("ms-pagos")
+                    .jsonPath("$.role").value(role -> assertTrue(role.toString().contains("ADMIN_STYLERADAR")));
         }
+
+        String multiRoleBuyerToken = token("12", List.of("BUYER", "STORE_ADMIN"), null);
+        webTestClient.get().uri("/api/v1/subscriptions/12")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + multiRoleBuyerToken).exchange()
+                .expectStatus().isOk().expectBody()
+                .jsonPath("$.service").isEqualTo("ms-pagos")
+                .jsonPath("$.role").isEqualTo("BUYER,STORE_ADMIN");
+
+        webTestClient.get().uri("/api/v1/admin/payments")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + multiRoleBuyerToken).exchange()
+                .expectStatus().isForbidden();
+
         assertRoutedTo("/api/v1/planes", "ms-pagos");
     }
 
     @Test
-    @DisplayName("Pagos: webhook de MercadoPago es publico (sin JWT) pero las operaciones de pago privadas exigen token")
+    @DisplayName("Pagos: webhook de MercadoPago es publico (sin JWT) pero las operaciones de pago privadas y /plans exigen token")
     void shouldAllowWebhookAndProtectPrivatePagos() {
         webTestClient.post().uri("/api/v1/webhooks/mercadopago").exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
         webTestClient.post().uri("/api/v1/suscripciones/iniciar").exchange().expectStatus().isUnauthorized();
+        webTestClient.post().uri("/api/v1/subscriptions/start").exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri("/api/v1/pagos/historial").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/payments/history").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/plans").exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri("/api/v1/admin/pagos").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/admin/payments").exchange().expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("Tiendas: GET /api/v1/users/{id}/store prioriza ms-tiendas sobre ms-usuarios y foundations/stores son publicos")
+    void shouldRouteUsersStoreAndPublicFoundationsToTiendas() {
+        String token = token("42", List.of("BUYER"), null);
+        webTestClient.get().uri("/api/v1/users/42/store")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
+        webTestClient.get().uri("/api/v1/users/42")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-usuarios");
+        assertRoutedTo("/api/v1/foundations", "ms-tiendas");
+        assertRoutedTo("/api/v1/stores", "ms-tiendas");
+        assertRoutedTo("/api/v1/stores/900555777-1", "ms-tiendas");
+        assertRoutedTo("/api/v1/stores/900555777-1/photos", "ms-tiendas");
+        webTestClient.get().uri("/api/v1/users/42/store").exchange().expectStatus().isUnauthorized();
     }
 }
