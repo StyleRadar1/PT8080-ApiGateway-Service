@@ -804,4 +804,35 @@ class JwtTokenValidatorFilterTest {
         assertFalse(foreignPassed.get(), "Un token firmado con otra clave jamás debe continuar hacia downstream");
         assertEquals(HttpStatus.UNAUTHORIZED, foreignExchange.getResponse().getStatusCode());
     }
+
+    @Test
+    @DisplayName("Tiendas (ms-tiendas): GET de catalog-settings, low-stock-threshold y new-arrival-days son públicos sin JWT; PUT sin JWT retorna 401")
+    void filter_rutasPublicasYProtegidasConfiguracionTiendas() {
+        for (String publicGetPath : List.of(
+                "/api/v1/stores/900555777-1/catalog-settings",
+                "/api/v1/stores/900555777-1/low-stock-threshold",
+                "/api/v1/stores/900555777-1/new-arrival-days"
+        )) {
+            MockServerWebExchange getExchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.get(publicGetPath).build()
+            );
+            AtomicBoolean passed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(getExchange, ex -> {
+                passed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertTrue(passed.get(), "GET " + publicGetPath + " debe permitir acceso anónimo");
+
+            MockServerWebExchange putExchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.put(publicGetPath).build()
+            );
+            AtomicBoolean putPassed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(putExchange, ex -> {
+                putPassed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertFalse(putPassed.get(), "PUT " + publicGetPath + " sin JWT no debe pasar downstream");
+            assertEquals(HttpStatus.UNAUTHORIZED, putExchange.getResponse().getStatusCode());
+        }
+    }
 }
