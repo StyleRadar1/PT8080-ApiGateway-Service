@@ -94,9 +94,13 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/stores",
             "/api/v1/stores/",
             "/api/v1/stores/*",
+            "/api/v1/stores/*/photos",
+            "/api/v1/stores/*/photos/**",
             "/api/v1/tiendas",
             "/api/v1/tiendas/",
             "/api/v1/tiendas/*",
+            "/api/v1/tiendas/*/photos",
+            "/api/v1/tiendas/*/fotos",
             "/api/v1/catalogo",
             "/api/v1/catalogo/",
             "/api/v1/catalogo/**",
@@ -114,12 +118,15 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/almacenes/*/catalogo",
             "/api/v1/almacenes/*/catalogo/resumen",
             "/api/v1/almacenes/*/novedades",
+            "/api/v1/foundations",
+            "/api/v1/foundations/",
             "/api/v1/fundaciones/cercanas",
             "/api/v1/planes",
             "/api/v1/planes/**"
     );
 
     private final SecretKey secretKey;
+    private final SecretKey utf8FallbackKey;
     private final List<String> publicPaths;
     private final List<String> publicGetPaths;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
@@ -133,14 +140,19 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         if (rawSecret == null || rawSecret.isBlank()) {
             throw new IllegalStateException("JWT_SECRET_BASE64 o security.jwt.secret es requerido para inicializar el API Gateway");
         }
+        String trimmedSecret = rawSecret.trim();
+        byte[] utf8Bytes = trimmedSecret.getBytes(StandardCharsets.UTF_8);
         byte[] keyBytes;
         try {
-            byte[] decoded = Base64.getDecoder().decode(rawSecret.trim());
-            keyBytes = (decoded.length >= 32) ? decoded : rawSecret.getBytes(StandardCharsets.UTF_8);
+            byte[] decoded = Base64.getDecoder().decode(trimmedSecret);
+            keyBytes = (decoded.length >= 32) ? decoded : utf8Bytes;
         } catch (IllegalArgumentException e) {
-            keyBytes = rawSecret.getBytes(StandardCharsets.UTF_8);
+            keyBytes = utf8Bytes;
         }
         this.secretKey = Keys.hmacShaKeyFor(keyBytes);
+        this.utf8FallbackKey = (utf8Bytes.length >= 32 && !java.util.Arrays.equals(keyBytes, utf8Bytes))
+                ? Keys.hmacShaKeyFor(utf8Bytes)
+                : null;
 
         List<String> cleanedPublic = (customPublicPaths != null)
                 ? customPublicPaths.stream().filter(p -> p != null && !p.isBlank()).toList()
@@ -196,11 +208,7 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             }
 
             try {
-                Claims claims = Jwts.parser()
-                        .verifyWith(secretKey)
-                        .build()
-                        .parseSignedClaims(token)
-                        .getPayload();
+                Claims claims = parseSignedClaims(token);
 
                 String userId = claims.getSubject();
                 String role = claims.get("role", String.class);
@@ -217,18 +225,31 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
                     rolesStr = rolesObj.toString();
                 }
 
+                String mergedRoles = mergeRoles(role, rolesStr);
                 if (role == null && rolesStr != null) {
                     role = rolesStr;
                 }
-                if (rolesStr == null && role != null) {
-                    rolesStr = role;
+                if (mergedRoles != null && !mergedRoles.isBlank()) {
+                    rolesStr = mergedRoles;
+                }
+
+                if (isAdminPaymentsPath(path) && !hasAdminAccess(role, rolesStr)) {
+                    log.warn("[Gateway] Petición rechazada (403): Se requiere rol ADMIN_STYLERADAR hacia {}", path);
+                    return onError(
+                            exchange,
+                            "Acceso denegado: Se requiere rol ADMIN_STYLERADAR para consultar pagos administrativos",
+                            HttpStatus.FORBIDDEN
+                    );
                 }
 
                 if (userId != null && !userId.isBlank()) {
                     requestBuilder.header(USER_ID_HEADER, userId);
                 }
-                // Homologacion de roles: Auth emite ADMIN_STYLERADAR; Catalogo espera ADMIN en X-User-Role
-                String downstreamRole = normalizeDownstreamRole(role, rolesStr);
+                // Homologacion de roles: Pagos recibe todos los roles + ADMIN_STYLERADAR en X-User-Role;
+                // otros servicios conservan normalizeDownstreamRole (Catalogo espera ADMIN).
+                String downstreamRole = isPaymentsServicePath(path)
+                        ? buildPaymentsRoleHeader(role, rolesStr)
+                        : normalizeDownstreamRole(role, rolesStr);
                 String downstreamRoles = normalizeDownstreamRoles(rolesStr);
                 if (downstreamRole != null && !downstreamRole.isBlank()) {
                     requestBuilder.header(USER_ROLE_HEADER, downstreamRole);
@@ -272,8 +293,31 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         return false;
     }
 
+    private Claims parseSignedClaims(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (io.jsonwebtoken.security.SignatureException ex) {
+            if (utf8FallbackKey != null) {
+                return Jwts.parser()
+                        .verifyWith(utf8FallbackKey)
+                        .build()
+                        .parseSignedClaims(token)
+                        .getPayload();
+            }
+            throw ex;
+        }
+    }
+
     public boolean isPublicPath(String path) {
         if (path == null) {
+            return false;
+        }
+        if (pathMatcher.match("/api/v1/auth/logout", path)
+                || pathMatcher.match("/api/v1/auth/logout/**", path)) {
             return false;
         }
         return publicPaths.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
@@ -302,7 +346,10 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             return false;
         }
         String r = roleToken.trim().toUpperCase();
-        return r.equals("ADMIN_STYLERADAR") || r.equals("ROLE_ADMIN_STYLERADAR");
+        return r.equals("ADMIN_STYLERADAR")
+                || r.equals("ROLE_ADMIN_STYLERADAR")
+                || r.equals("STYLERADAR_ADMIN")
+                || r.equals("ROLE_STYLERADAR_ADMIN");
     }
 
     /** Auth emite ADMIN_STYLERADAR; Catalogo espera ADMIN en X-User-Role. Los demas roles se conservan intactos. */
@@ -338,6 +385,77 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             out.add("ADMIN");
         }
         return String.join(",", out);
+    }
+
+    private boolean isAdminPaymentsPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        return pathMatcher.match("/api/v1/admin/payments", path)
+                || pathMatcher.match("/api/v1/admin/payments/**", path)
+                || pathMatcher.match("/api/v1/admin/pagos", path)
+                || pathMatcher.match("/api/v1/admin/pagos/**", path);
+    }
+
+    private boolean isPaymentsServicePath(String path) {
+        if (path == null) {
+            return false;
+        }
+        return isAdminPaymentsPath(path)
+                || pathMatcher.match("/api/v1/subscriptions", path)
+                || pathMatcher.match("/api/v1/subscriptions/**", path)
+                || pathMatcher.match("/api/v1/suscripciones", path)
+                || pathMatcher.match("/api/v1/suscripciones/**", path)
+                || pathMatcher.match("/api/v1/payments", path)
+                || pathMatcher.match("/api/v1/payments/**", path)
+                || pathMatcher.match("/api/v1/pagos", path)
+                || pathMatcher.match("/api/v1/pagos/**", path)
+                || pathMatcher.match("/api/v1/plans", path)
+                || pathMatcher.match("/api/v1/plans/**", path)
+                || pathMatcher.match("/api/v1/planes", path)
+                || pathMatcher.match("/api/v1/planes/**", path);
+    }
+
+    private static java.util.LinkedHashSet<String> collectRoleTokens(String role, String rolesStr) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        addRoleTokens(out, role);
+        addRoleTokens(out, rolesStr);
+        return out;
+    }
+
+    private static void addRoleTokens(java.util.Set<String> target, String raw) {
+        if (raw == null || raw.isBlank()) {
+            return;
+        }
+        for (String token : raw.split("[,\\s]+")) {
+            if (!token.isBlank()) {
+                target.add(token.trim());
+            }
+        }
+    }
+
+    private static String mergeRoles(String role, String rolesStr) {
+        java.util.LinkedHashSet<String> out = collectRoleTokens(role, rolesStr);
+        return out.isEmpty() ? null : String.join(",", out);
+    }
+
+    static boolean hasAdminAccess(String role, String rolesStr) {
+        for (String token : collectRoleTokens(role, rolesStr)) {
+            if (isStyleRadarAdmin(token)
+                    || "ADMIN".equalsIgnoreCase(token)
+                    || "ROLE_ADMIN".equalsIgnoreCase(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static String buildPaymentsRoleHeader(String role, String rolesStr) {
+        java.util.LinkedHashSet<String> out = collectRoleTokens(role, rolesStr);
+        if (out.stream().anyMatch(JwtTokenValidatorFilter::isStyleRadarAdmin)) {
+            out.add("ADMIN_STYLERADAR");
+        }
+        return out.isEmpty() ? null : String.join(",", out);
     }
     static String extractAlmacenId(Claims claims) {
         for (String key : new String[]{"almacenId", "almacen_id", "storeId", "store_id"}) {
