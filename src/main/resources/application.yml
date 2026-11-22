@@ -130,43 +130,44 @@ spring:
           predicates:
             - Method=GET
             - Path=/api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
-        # ms-tiendas: Registro y Gestión de Almacenes Aliados (Puerto 8140)
+        # ms-chat-conversations: rutas de conversaciones bajo users/stores/donations/publications (prioridad -2)
+        - id: ms-chat-conversations
+          order: -2
+          uri: ${CHAT_SERVICE_URL:http://localhost:8320}
+          predicates:
+            - Path=/api/v1/users/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
+
+        # ms-tiendas: Registro y Gestión de Almacenes Aliados y Fundaciones (Puerto 8140)
         - id: ms-tiendas
           order: -1
           uri: ${TIENDAS_SERVICE_URL:http://localhost:8140}
           predicates:
-            - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/users/*/store/**, /api/v1/usuarios/*/store, /api/v1/usuarios/*/tienda, /api/v1/tiendas, /api/v1/tiendas/**, /api/v1/almacenes/**, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
+            - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
 
         # ms-usuarios: Gestión de Usuarios y Perfiles (Puerto 8120)
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:http://localhost:8120}
           predicates:
-            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/users, /api/v1/users/**, /api/v1/admin/usuarios/**, /api/v1/admin/users/**, /api/v1/admin/**
+            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/admin/usuarios, /api/v1/admin/usuarios/**
 
         # --- PAQUETE 2: CATÁLOGO (RESTrepo · Bloque 8200) ---
         # ms-inventario: Inventario por Talla (Puerto 8200)
         - id: ms-inventario
           uri: ${INVENTARIO_SERVICE_URL:http://localhost:8200}
           predicates:
-            - Path=/api/v1/inventario/**, /api/v1/inventory/**
+            - Path=/api/v1/inventario, /api/v1/inventario/**
 
         # ms-item-catalogo: Catálogo de Prendas y Búsqueda (Puerto 8220)
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
           predicates:
-            - Path=/api/v1/catalogo, /api/v1/catalogo/**, /api/v1/prendas, /api/v1/prendas/**, /api/v1/catalog, /api/v1/catalog/**, /api/v1/items, /api/v1/items/**
-
-        # ms-geolocalizacion: Coordenadas y Mapa de Tiendas (Puerto 8240)
-        - id: ms-geolocalizacion
-          uri: ${GEOLOCALIZACION_SERVICE_URL:http://localhost:8240}
-          predicates:
-            - Path=/api/v1/geolocalizacion/**, /api/v1/geolocation/**
+            - Path=/api/v1/prendas, /api/v1/prendas/**, /api/v1/catalogo/items/**
 
         # ms-playlist: Listas de Prendas y Outfits (Puerto 8260)
         - id: ms-playlist
           uri: ${PLAYLIST_SERVICE_URL:http://localhost:8260}
           predicates:
-            - Path=/api/v1/playlist/**, /api/v1/playlists/**
+            - Path=/api/v1/playlists, /api/v1/playlists/**
 
         # --- PAQUETE 3: MENSAJERÍA Y CHAT (Guatoque · Bloque 8300) ---
         # ms-notificaciones: Alertas y Notificaciones Push/Email (Puerto 8300)
@@ -174,19 +175,19 @@ spring:
           order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
           predicates:
-            - Path=/api/v1/notificaciones, /api/v1/notificaciones/**, /api/v1/notifications, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/usuarios/*/alertas, /api/v1/usuarios/*/alertas/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**, /api/v1/users/*/preferencias-avisos, /api/v1/users/*/preferencias-avisos/**, /api/v1/usuarios/*/preferencias-avisos, /api/v1/usuarios/*/preferencias-avisos/**
+            - Path=/api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**
 
         # ms-chat: Operaciones REST de Chat en Vivo y Mensajería (Puerto 8320)
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:http://localhost:8320}
           predicates:
-            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**
+            - Path=/api/v1/conversations, /api/v1/conversations/**
 
         # ms-chat-ws: Enrutamiento WebSocket en Tiempo Real con esquema ws:// (Puerto 8320)
         - id: ms-chat-ws
           uri: ${CHAT_WS_SERVICE_URL:${CHAT_SERVICE_WS_URL:ws://localhost:8320}}
           predicates:
-            - Path=/ws/**, /ws-chat/**, /ws, /ws-chat
+            - Path=/ws, /ws/**, /ws-chat, /ws-chat/**
 
         # --- PAQUETE 4: PAGOS Y ESTADÍSTICAS (NQS · Bloque 8400) ---
         # ms-pagos-suscripciones: Pasarela de Pagos y Suscripciones (Puerto 8400)
@@ -194,20 +195,20 @@ spring:
           order: -1
           uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
           predicates:
-            - Path=/api/v1/pagos, /api/v1/pagos/**, /api/v1/payments, /api/v1/payments/**, /api/v1/subscriptions, /api/v1/subscriptions/**, /api/v1/suscripciones, /api/v1/suscripciones/**, /api/v1/plans, /api/v1/plans/**, /api/v1/planes, /api/v1/planes/**, /api/v1/webhooks, /api/v1/webhooks/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/admin/pagos, /api/v1/admin/pagos/**
+            - Path=/api/v1/plans, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/webhooks/mercadopago
 
         # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8420}
           predicates:
-            - Path=/api/v1/estadisticas/**, /api/v1/statistics/**, /api/v1/analytics/**
+            - Path=/api/v1/statistics/**
 
         # --- PAQUETE 5: EXPERIENCIA, DONACIONES Y PROBADOR (Portal 8080 · Bloque 8500) ---
         # ms-probador-virtual: Probador Virtual con IA FASHN VTON (Puerto 8500)
         - id: ms-probador-virtual
           uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:http://localhost:8500}}
           predicates:
-            - Path=/api/v1/try-on/**, /api/v1/probador/**
+            - Path=/api/v1/try-on/**
           filters:
             - name: CircuitBreaker
               args:
@@ -218,7 +219,7 @@ spring:
         - id: ms-segunda-vida-donaciones
           uri: ${DONACIONES_SERVICE_URL:http://localhost:8520}
           predicates:
-            - Path=/api/v1/health, /api/v1/donations, /api/v1/donations/**, /api/v1/second-hand, /api/v1/second-hand/**, /api/v1/donaciones, /api/v1/donaciones/**, /api/v1/segunda-mano, /api/v1/segunda-mano/**
+            - Path=/api/v1/health, /api/v1/donations, /api/v1/donations/**, /api/v1/second-hand, /api/v1/second-hand/**
           filters:
             - name: CircuitBreaker
               args:

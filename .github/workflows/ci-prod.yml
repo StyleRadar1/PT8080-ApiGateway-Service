@@ -111,7 +111,7 @@ jobs:
                 CHAT_SERVICE_URL="https://gj-chat-service-prod-santi.azurewebsites.net" \
                 CHAT_WS_SERVICE_URL="wss://gj-chat-service-prod-santi.azurewebsites.net" \
                 PAGOS_SERVICE_URL="https://ca-styleradar-pagos-prod.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io" \
-                ESTADISTICAS_SERVICE_URL="https://styleradar-estadisticas-prod.azurewebsites.net"
+                ESTADISTICAS_SERVICE_URL="https://sr-ms-estadisticas-prod.azurewebsites.net"
 
       - uses: azure/webapps-deploy@v3
         with:

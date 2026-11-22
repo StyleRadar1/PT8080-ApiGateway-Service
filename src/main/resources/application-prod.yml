@@ -115,73 +115,74 @@ spring:
           predicates:
             - Method=GET
             - Path=/api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
+        - id: ms-chat-conversations
+          order: -2
+          uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
+          predicates:
+            - Path=/api/v1/users/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
+
         - id: ms-tiendas
           order: -1
           uri: ${TIENDAS_SERVICE_URL:https://styleradar-tiendas-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/users/*/store/**, /api/v1/usuarios/*/store, /api/v1/usuarios/*/tienda, /api/v1/tiendas, /api/v1/tiendas/**, /api/v1/almacenes/**, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
+            - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
 
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
           predicates:
-            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/users, /api/v1/users/**, /api/v1/admin/usuarios/**, /api/v1/admin/users/**, /api/v1/admin/**
+            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/admin/usuarios, /api/v1/admin/usuarios/**
 
         # Paquete 2: Catálogo (RESTrepo · Azure Container Apps)
         - id: ms-inventario
           uri: ${INVENTARIO_SERVICE_URL:https://rst-inventory-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/inventario/**, /api/v1/inventory/**
+            - Path=/api/v1/inventario, /api/v1/inventario/**
 
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:https://rst-itemcatalog-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/catalogo, /api/v1/catalogo/**, /api/v1/prendas, /api/v1/prendas/**, /api/v1/catalog, /api/v1/catalog/**, /api/v1/items, /api/v1/items/**
-
-        - id: ms-geolocalizacion
-          uri: ${GEOLOCALIZACION_SERVICE_URL:https://rst-geolocation-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
-          predicates:
-            - Path=/api/v1/geolocalizacion/**, /api/v1/geolocation/**
+            - Path=/api/v1/prendas, /api/v1/prendas/**, /api/v1/catalogo/items/**
 
         # ms-playlist
         - id: ms-playlist
           uri: ${PLAYLIST_SERVICE_URL:https://rst-playlist-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/playlist/**, /api/v1/playlists/**
+            - Path=/api/v1/playlists, /api/v1/playlists/**
 
         # Paquete 3: Mensajería
         - id: ms-notificaciones
           order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/notificaciones, /api/v1/notificaciones/**, /api/v1/notifications, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/usuarios/*/alertas, /api/v1/usuarios/*/alertas/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**, /api/v1/users/*/preferencias-avisos, /api/v1/users/*/preferencias-avisos/**, /api/v1/usuarios/*/preferencias-avisos, /api/v1/usuarios/*/preferencias-avisos/**
+            - Path=/api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**
 
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
-            - Path=/api/v1/conversations/**, /api/v1/conversaciones/**, /api/v1/chat/**
+            - Path=/api/v1/conversations, /api/v1/conversations/**
 
         - id: ms-chat-ws
           uri: ${CHAT_WS_SERVICE_URL:wss://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
-            - Path=/ws/**, /ws-chat/**, /ws, /ws-chat
+            - Path=/ws, /ws/**, /ws-chat, /ws-chat/**
 
         # Paquete 4: Pagos y Estadísticas
         - id: ms-pagos-suscripciones
           order: -1
           uri: ${PAGOS_SERVICE_URL:https://ca-styleradar-pagos-prod.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/pagos, /api/v1/pagos/**, /api/v1/payments, /api/v1/payments/**, /api/v1/subscriptions, /api/v1/subscriptions/**, /api/v1/suscripciones, /api/v1/suscripciones/**, /api/v1/plans, /api/v1/plans/**, /api/v1/planes, /api/v1/planes/**, /api/v1/webhooks, /api/v1/webhooks/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/admin/pagos, /api/v1/admin/pagos/**
+            - Path=/api/v1/plans, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/webhooks/mercadopago
 
         - id: ms-estadisticas
-          uri: ${ESTADISTICAS_SERVICE_URL:https://styleradar-estadisticas-prod.azurewebsites.net}
+          uri: ${ESTADISTICAS_SERVICE_URL:https://sr-ms-estadisticas-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/estadisticas/**, /api/v1/statistics/**, /api/v1/analytics/**
+            - Path=/api/v1/statistics/**
 
         # Paquete 5: Experiencia y Donaciones
         - id: ms-probador-virtual
           uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-virtualtryon-prod.azurewebsites.net}}
           predicates:
-            - Path=/api/v1/try-on/**, /api/v1/probador/**
+            - Path=/api/v1/try-on/**
           filters:
             - name: CircuitBreaker
               args:
@@ -191,7 +192,7 @@ spring:
         - id: ms-segunda-vida-donaciones
           uri: ${DONACIONES_SERVICE_URL:https://styleradar-donaciones-prod-jmunar.azurewebsites.net}
           predicates:
-            - Path=/api/v1/health, /api/v1/donations, /api/v1/donations/**, /api/v1/second-hand, /api/v1/second-hand/**, /api/v1/donaciones, /api/v1/donaciones/**, /api/v1/segunda-mano, /api/v1/segunda-mano/**
+            - Path=/api/v1/health, /api/v1/donations, /api/v1/donations/**, /api/v1/second-hand, /api/v1/second-hand/**
           filters:
             - name: CircuitBreaker
               args:
