@@ -127,7 +127,7 @@ spring:
           order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-qa.azurewebsites.net}
           predicates:
-            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/users/*/notifications
+            - Path=/api/v1/notificaciones, /api/v1/notificaciones/**, /api/v1/notifications, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/usuarios/*/alertas, /api/v1/usuarios/*/alertas/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**, /api/v1/users/*/preferencias-avisos, /api/v1/users/*/preferencias-avisos/**, /api/v1/usuarios/*/preferencias-avisos, /api/v1/usuarios/*/preferencias-avisos/**
 
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net}

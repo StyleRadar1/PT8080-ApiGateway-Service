@@ -173,7 +173,7 @@ spring:
           order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
           predicates:
-            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/users/*/notifications
+            - Path=/api/v1/notificaciones, /api/v1/notificaciones/**, /api/v1/notifications, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/usuarios/*/alertas, /api/v1/usuarios/*/alertas/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**, /api/v1/users/*/preferencias-avisos, /api/v1/users/*/preferencias-avisos/**, /api/v1/usuarios/*/preferencias-avisos, /api/v1/usuarios/*/preferencias-avisos/**
 
         # ms-chat: Operaciones REST de Chat en Vivo y Mensajería (Puerto 8320)
         - id: ms-chat

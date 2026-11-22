@@ -41,6 +41,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     private static final HttpServer TIENDAS = newServer("ms-tiendas");
     private static final HttpServer PAGOS = newServer("ms-pagos");
     private static final HttpServer USUARIOS = newServer("ms-usuarios");
+    private static final HttpServer NOTIFICACIONES = newServer("ms-notificaciones");
 
     @Autowired
     private WebTestClient webTestClient;
@@ -85,6 +86,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         TIENDAS.stop(0);
         PAGOS.stop(0);
         USUARIOS.stop(0);
+        NOTIFICACIONES.stop(0);
     }
 
     @DynamicPropertySource
@@ -94,6 +96,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         registry.add("TIENDAS_SERVICE_URL", () -> "http://127.0.0.1:" + TIENDAS.getAddress().getPort());
         registry.add("PAGOS_SERVICE_URL", () -> "http://127.0.0.1:" + PAGOS.getAddress().getPort());
         registry.add("USUARIOS_SERVICE_URL", () -> "http://127.0.0.1:" + USUARIOS.getAddress().getPort());
+        registry.add("NOTIFICACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + NOTIFICACIONES.getAddress().getPort());
         registry.add("security.jwt.secret-base64", () -> SECRET);
     }
 
@@ -245,5 +248,38 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         assertRoutedTo("/api/v1/stores/900555777-1", "ms-tiendas");
         assertRoutedTo("/api/v1/stores/900555777-1/photos", "ms-tiendas");
         webTestClient.get().uri("/api/v1/users/42/store").exchange().expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("Notificaciones: alertas, preferencias y stream SSE con ?ticket= llegan a ms-notificaciones")
+    void shouldRouteNotificationAlertsPreferencesAndSseTicketToNotificaciones() {
+        String bearerToken = token("42", List.of("BUYER"), null);
+        for (String uri : List.of(
+                "/api/v1/users/42/alerts",
+                "/api/v1/usuarios/42/alertas",
+                "/api/v1/users/42/notification-preferences",
+                "/api/v1/users/42/preferencias-avisos",
+                "/api/v1/usuarios/42/preferencias-avisos"
+        )) {
+            webTestClient.get().uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken).exchange()
+                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
+        }
+
+        SecretKey key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(SECRET.trim()));
+        String sseTicket = Jwts.builder()
+                .subject("42")
+                .claim("purpose", "sse-stream")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(key)
+                .compact();
+
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + sseTicket).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
+        webTestClient.get().uri("/api/v1/usuarios/42/notificaciones/stream?ticket=" + sseTicket).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream").exchange()
+                .expectStatus().isUnauthorized();
     }
 }

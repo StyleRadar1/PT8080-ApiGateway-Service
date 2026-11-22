@@ -188,20 +188,21 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         });
 
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        String effectiveAuthHeader = resolveEffectiveAuthHeader(request, authHeader);
         boolean isPublic = isPublicRequest(request);
 
-        // 2. Si la ruta es protegida y no incluye Authorization Bearer -> Rechazar con 401 Unauthorized
+        // 2. Si la ruta es protegida y no incluye Authorization Bearer (ni ticket SSE válido) -> Rechazar con 401 Unauthorized
         if (!isPublic) {
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            if (effectiveAuthHeader == null || !effectiveAuthHeader.startsWith("Bearer ")) {
                 log.warn("[Gateway] Petición rechazada (401): Acceso anónimo a ruta protegida {} {}",
                         request.getMethod(), path);
                 return onError(exchange, "Acceso no autorizado: Se requiere token Bearer para acceder a esta ruta protegida", HttpStatus.UNAUTHORIZED);
             }
         }
 
-        // 3. Si se incluye credencial Bearer (en ruta pública o protegida), validar estrictamente
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7).trim();
+        // 3. Si se incluye credencial Bearer o ticket SSE (en ruta pública o protegida), validar estrictamente
+        if (effectiveAuthHeader != null && effectiveAuthHeader.startsWith("Bearer ")) {
+            String token = effectiveAuthHeader.substring(7).trim();
             if (token.isEmpty()) {
                 log.warn("[Gateway] Petición rechazada (401): Cabecera Authorization Bearer vacía hacia {}", path);
                 return onError(exchange, "Token Bearer no proporcionado o vacío", HttpStatus.UNAUTHORIZED);
@@ -273,6 +274,33 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
 
         // 4. Continuar la cadena con la petición saneada/autenticada
         return chain.filter(exchange.mutate().request(requestBuilder.build()).build());
+    }
+
+    private String resolveEffectiveAuthHeader(ServerHttpRequest request, String authHeader) {
+        if (authHeader != null && !authHeader.isBlank()) {
+            return authHeader;
+        }
+        if (isSseNotificationStreamRequest(request)) {
+            String ticket = request.getQueryParams().getFirst("ticket");
+            if (ticket != null && !ticket.isBlank()) {
+                return "Bearer " + ticket.trim();
+            }
+        }
+        return authHeader;
+    }
+
+    private boolean isSseNotificationStreamRequest(ServerHttpRequest request) {
+        if (request == null || !HttpMethod.GET.equals(request.getMethod())) {
+            return false;
+        }
+        String path = request.getURI().getPath();
+        if (path == null) {
+            return false;
+        }
+        return pathMatcher.match("/api/v1/users/*/notifications/stream", path)
+                || pathMatcher.match("/api/v1/usuarios/*/notificaciones/stream", path)
+                || pathMatcher.match("/api/v1/notifications/*/stream", path)
+                || pathMatcher.match("/api/v1/notificaciones/*/stream", path);
     }
 
     public boolean isPublicRequest(ServerHttpRequest request) {
