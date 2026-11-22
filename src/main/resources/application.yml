@@ -18,6 +18,8 @@ spring:
               - "http://localhost:*"
               - "https://*.styleradar.co"
               - "https://*.azurewebsites.net"
+              - "https://*.azurestaticapps.net"
+              - "https://*.vercel.app"
             allowedMethods:
               - GET
               - POST
@@ -27,6 +29,11 @@ spring:
               - OPTIONS
             allowedHeaders:
               - "*"
+            exposedHeaders:
+              - "Retry-After"
+              - "Authorization"
+              - "WWW-Authenticate"
+              - "Location"
             allowCredentials: true
             maxAge: 3600
       routes:
@@ -89,6 +96,14 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
+        # Swagger Pagos y Suscripciones (transforma /v3/api-docs/pagos -> /v3/api-docs en :8400)
+        - id: ms-pagos-swagger
+          uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
+          predicates:
+            - Path=/v3/api-docs/pagos
+          filters:
+            - SetPath=/v3/api-docs
+
         # ==============================================================
         # 2. Rutas de Microservicios de Negocio (Matriz Oficial de Puertos)
         # ==============================================================
@@ -116,15 +131,16 @@ spring:
             - Path=/api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
         # ms-tiendas: Registro y Gestión de Almacenes Aliados (Puerto 8140)
         - id: ms-tiendas
+          order: -1
           uri: ${TIENDAS_SERVICE_URL:http://localhost:8140}
           predicates:
-            - Path=/api/v1/stores/**, /api/v1/foundations/**, /api/v1/tiendas/**, /api/v1/almacenes/**, /api/v1/admin/stores/**, /api/v1/admin/foundations/**
+            - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/users/*/store/**, /api/v1/usuarios/*/store, /api/v1/usuarios/*/tienda, /api/v1/tiendas, /api/v1/tiendas/**, /api/v1/almacenes/**, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
 
         # ms-usuarios: Gestión de Usuarios y Perfiles (Puerto 8120)
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:http://localhost:8120}
           predicates:
-            - Path=/api/v1/usuarios/**, /api/v1/admin/usuarios/**, /api/v1/admin/**
+            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/users, /api/v1/users/**, /api/v1/admin/usuarios/**, /api/v1/admin/users/**, /api/v1/admin/**
 
         # --- PAQUETE 2: CATÁLOGO (RESTrepo · Bloque 8200) ---
         # ms-inventario: Inventario por Talla (Puerto 8200)
@@ -177,7 +193,7 @@ spring:
           order: -1
           uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
           predicates:
-            - Path=/api/v1/pagos/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/suscripciones/**, /api/v1/planes/**, /api/v1/webhooks/**, /api/v1/admin/pagos/**
+            - Path=/api/v1/pagos, /api/v1/pagos/**, /api/v1/payments, /api/v1/payments/**, /api/v1/subscriptions, /api/v1/subscriptions/**, /api/v1/suscripciones, /api/v1/suscripciones/**, /api/v1/plans, /api/v1/plans/**, /api/v1/planes, /api/v1/planes/**, /api/v1/webhooks, /api/v1/webhooks/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/admin/pagos, /api/v1/admin/pagos/**
 
         # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
         - id: ms-estadisticas
@@ -250,6 +266,8 @@ springdoc:
         url: "/v3/api-docs/usuarios"
       - name: "ms-chat (:8320)"
         url: "/v3/api-docs/chat"
+      - name: "ms-pagos-suscripciones (:8400)"
+        url: "/v3/api-docs/pagos"
 
 # Seguridad JWT Perimetral (inyección limpia por variable de entorno, sin clave quemada)
 security:
