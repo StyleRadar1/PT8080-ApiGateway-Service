@@ -29,8 +29,10 @@ public class OpenApiGatewayConfig {
                                 .name("Apache 2.0")
                                 .url("https://www.apache.org/licenses/LICENSE-2.0")))
                 .servers(List.of(
-                        new Server().url("http://localhost:8080").description("API Gateway Local (Puerto 8080)"),
-                        new Server().url("https://styleradar-gateway-prod.azurewebsites.net").description("API Gateway Producción (Azure - Sprint 2/3)")
+                        new Server().url("/").description("Servidor Actual (QA, Producción o Local)"),
+                        new Server().url("https://styleradar-gateway-qa.azurewebsites.net").description("API Gateway QA (Azure)"),
+                        new Server().url("https://styleradar-gateway-prod.azurewebsites.net").description("API Gateway Producción (Azure)"),
+                        new Server().url("http://localhost:8080").description("API Gateway Local (Puerto 8080)")
                 ));
     }
 }

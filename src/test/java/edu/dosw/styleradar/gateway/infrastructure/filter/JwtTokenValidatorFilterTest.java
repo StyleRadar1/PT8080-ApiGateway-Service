@@ -892,4 +892,52 @@ class JwtTokenValidatorFilterTest {
             assertEquals(HttpStatus.UNAUTHORIZED, postExchange.getResponse().getStatusCode());
         }
     }
+
+    @Test
+    @DisplayName("Registro de usuarios (CADCHE-Users-Service): POST /api/v1/usuarios es público sin JWT, pero rechaza token inválido y protege GET/PUT/DELETE y subrutas")
+    void filter_registroUsuariosPostPublicoYSubrutasProtegidas() {
+        assertFalse(filter.isPublicPostPath(null));
+
+        for (String publicPostUri : List.of("/api/v1/usuarios", "/api/v1/usuarios/")) {
+            MockServerWebExchange postAnon = MockServerWebExchange.from(
+                    MockServerHttpRequest.post(publicPostUri).build()
+            );
+            AtomicBoolean passed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(postAnon, ex -> {
+                passed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertTrue(passed.get(), "POST " + publicPostUri + " sin JWT debe permitir registro público");
+
+            MockServerWebExchange postBadToken = MockServerWebExchange.from(
+                    MockServerHttpRequest.post(publicPostUri)
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer token.invalido.firma")
+                            .build()
+            );
+            AtomicBoolean badPassed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(postBadToken, ex -> {
+                badPassed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertFalse(badPassed.get(), "POST " + publicPostUri + " con JWT inválido debe rechazarse con 401");
+            assertEquals(HttpStatus.UNAUTHORIZED, postBadToken.getResponse().getStatusCode());
+        }
+
+        for (MockServerHttpRequest protectedReq : List.of(
+                MockServerHttpRequest.get("/api/v1/usuarios").build(),
+                MockServerHttpRequest.get("/api/v1/usuarios/me").build(),
+                MockServerHttpRequest.put("/api/v1/usuarios/me").build(),
+                MockServerHttpRequest.delete("/api/v1/usuarios/1").build(),
+                MockServerHttpRequest.post("/api/v1/usuarios/me/busquedas-guardadas").build()
+        )) {
+            MockServerWebExchange ex = MockServerWebExchange.from(protectedReq);
+            AtomicBoolean passed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(ex, chainEx -> {
+                passed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertFalse(passed.get(), protectedReq.getMethod() + " " + protectedReq.getURI().getPath() + " sin JWT debe retornar 401");
+            assertEquals(HttpStatus.UNAUTHORIZED, ex.getResponse().getStatusCode());
+        }
+    }
 }

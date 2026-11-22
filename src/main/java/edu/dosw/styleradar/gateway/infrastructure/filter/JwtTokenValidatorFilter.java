@@ -109,6 +109,11 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/inventario/tallas/*/prendas"
     );
 
+    public static final List<String> DEFAULT_PUBLIC_POST_PATHS = List.of(
+            "/api/v1/usuarios",
+            "/api/v1/usuarios/"
+    );
+
     private final SecretKey secretKey;
     private final SecretKey utf8FallbackKey;
     private final List<String> publicPaths;
@@ -313,7 +318,17 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         if (HttpMethod.GET.equals(method) && isPublicGetPath(path)) {
             return true;
         }
+        if (HttpMethod.POST.equals(method) && isPublicPostPath(path)) {
+            return true;
+        }
         return false;
+    }
+
+    public boolean isPublicPostPath(String path) {
+        if (path == null) {
+            return false;
+        }
+        return DEFAULT_PUBLIC_POST_PATHS.contains(path);
     }
 
     private Claims parseSignedClaims(String token) {
