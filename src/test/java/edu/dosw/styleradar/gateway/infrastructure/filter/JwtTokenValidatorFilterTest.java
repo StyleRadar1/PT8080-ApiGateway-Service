@@ -223,6 +223,10 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicPath("/v3/api-docs/probador"));
         assertTrue(filter.isPublicPath("/api/v1/auth/login"));
         assertTrue(filter.isPublicPath("/api/v1/auth/register"));
+        assertTrue(filter.isPublicPath("/api/v1/auth/otp/verify"));
+        assertTrue(filter.isPublicPath("/api/v1/auth/oauth2/google"));
+        assertFalse(filter.isPublicPath("/api/v1/auth/logout"));
+        assertFalse(filter.isPublicPath("/api/v1/auth/logout/all"));
         assertTrue(filter.isPublicPath("/fallback/probador"));
         assertTrue(filter.isPublicPath("/ws"));
         assertTrue(filter.isPublicPath("/ws/chat"));
@@ -536,6 +540,9 @@ class JwtTokenValidatorFilterTest {
     void testNormalizeDownstreamRolesAndRole() {
         assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ADMIN_STYLERADAR", "ADMIN_STYLERADAR"));
         assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ROLE_ADMIN_STYLERADAR", "ROLE_ADMIN_STYLERADAR"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("STYLERADAR_ADMIN", "STYLERADAR_ADMIN"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("ROLE_STYLERADAR_ADMIN", "ROLE_STYLERADAR_ADMIN"));
+        assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("BUYER", "BUYER,STYLERADAR_ADMIN"));
         assertEquals("ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRole("COMPRADOR", "COMPRADOR,ADMIN_STYLERADAR"));
         assertEquals("COMPRADOR", JwtTokenValidatorFilter.normalizeDownstreamRole("COMPRADOR", "COMPRADOR,USER"));
         assertNull(JwtTokenValidatorFilter.normalizeDownstreamRole(null, null));
@@ -543,6 +550,7 @@ class JwtTokenValidatorFilterTest {
         assertNull(JwtTokenValidatorFilter.normalizeDownstreamRoles(null));
         assertEquals("", JwtTokenValidatorFilter.normalizeDownstreamRoles(""));
         assertEquals("COMPRADOR,ADMIN_STYLERADAR,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR,ADMIN_STYLERADAR"));
+        assertEquals("BUYER,STYLERADAR_ADMIN,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("BUYER,STYLERADAR_ADMIN"));
         assertEquals("COMPRADOR,ADMIN_STYLERADAR,ADMIN", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR, ,ADMIN_STYLERADAR"));
         assertEquals("COMPRADOR,USER", JwtTokenValidatorFilter.normalizeDownstreamRoles("COMPRADOR,USER"));
     }
@@ -614,6 +622,16 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicRequest(catalogoReq), "GET /api/v1/catalogo debe ser público");
         MockServerHttpRequest catalogoSlashReq = MockServerHttpRequest.get("/api/v1/catalogo/").build();
         assertTrue(filter.isPublicRequest(catalogoSlashReq), "GET /api/v1/catalogo/ debe ser público");
+        MockServerHttpRequest storesReq = MockServerHttpRequest.get("/api/v1/stores").build();
+        assertTrue(filter.isPublicRequest(storesReq), "GET /api/v1/stores debe ser público");
+        MockServerHttpRequest storesNitReq = MockServerHttpRequest.get("/api/v1/stores/900555777-1").build();
+        assertTrue(filter.isPublicRequest(storesNitReq), "GET /api/v1/stores/{nit} debe ser público");
+        MockServerHttpRequest storePhotosReq = MockServerHttpRequest.get("/api/v1/stores/900555777-1/photos").build();
+        assertTrue(filter.isPublicRequest(storePhotosReq), "GET /api/v1/stores/{nit}/photos debe ser público");
+        MockServerHttpRequest postStorePhotosReq = MockServerHttpRequest.post("/api/v1/stores/900555777-1/photos").build();
+        assertFalse(filter.isPublicRequest(postStorePhotosReq), "POST /api/v1/stores/{nit}/photos no debe ser público");
+        MockServerHttpRequest foundationsReq = MockServerHttpRequest.get("/api/v1/foundations").build();
+        assertTrue(filter.isPublicRequest(foundationsReq), "GET /api/v1/foundations debe ser público");
 
         // Rutas privadas de donaciones y segunda mano
         String[] privatePaths = {
@@ -664,5 +682,152 @@ class JwtTokenValidatorFilterTest {
 
         StepVerifier.create(result).verifyComplete();
         assertTrue(chainCalled.get());
+    }
+
+    @Test
+    @DisplayName("SSE Notificaciones: exige claim purpose=sse-stream en ?ticket= y rechaza uso fuera del stream")
+    void testFilterAllowsSseNotificationStreamWithValidTicketQueryParam() {
+        String validTicket = Jwts.builder()
+                .subject("42")
+                .claim("purpose", "sse-stream")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(secretKey)
+                .compact();
+        String ticketWithoutPurpose = Jwts.builder()
+                .subject("42")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(secretKey)
+                .compact();
+        String ticketWrongPurpose = Jwts.builder()
+                .subject("42")
+                .claim("purpose", "access-api")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest validStreamReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + validTicket)
+                .build();
+        MockServerWebExchange validExchange = MockServerWebExchange.from(validStreamReq);
+        AtomicBoolean chainCalled = new AtomicBoolean(false);
+
+        StepVerifier.create(filter.filter(validExchange, ex -> {
+            chainCalled.set(true);
+            assertEquals("42", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertTrue(chainCalled.get());
+
+        MockServerHttpRequest missingTicketReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream").build();
+        MockServerWebExchange missingExchange = MockServerWebExchange.from(missingTicketReq);
+        StepVerifier.create(filter.filter(missingExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, missingExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest invalidTicketReq = MockServerHttpRequest.get("/api/v1/usuarios/42/notificaciones/stream?ticket=invalido").build();
+        MockServerWebExchange invalidExchange = MockServerWebExchange.from(invalidTicketReq);
+        StepVerifier.create(filter.filter(invalidExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, invalidExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest noPurposeReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + ticketWithoutPurpose).build();
+        MockServerWebExchange noPurposeExchange = MockServerWebExchange.from(noPurposeReq);
+        StepVerifier.create(filter.filter(noPurposeExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, noPurposeExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest wrongPurposeReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + ticketWrongPurpose).build();
+        MockServerWebExchange wrongPurposeExchange = MockServerWebExchange.from(wrongPurposeReq);
+        StepVerifier.create(filter.filter(wrongPurposeExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, wrongPurposeExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest sseBearerOnProtectedReq = MockServerHttpRequest.get("/api/v1/users/42/alerts")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + validTicket)
+                .build();
+        MockServerWebExchange sseBearerExchange = MockServerWebExchange.from(sseBearerOnProtectedReq);
+        AtomicBoolean protectedChainCalled = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(sseBearerExchange, ex -> {
+            protectedChainCalled.set(true);
+            return Mono.empty();
+        })).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, sseBearerExchange.getResponse().getStatusCode());
+        assertEquals(false, protectedChainCalled.get());
+
+        MockServerHttpRequest sseTicketQueryOnProtectedReq = MockServerHttpRequest.get("/api/v1/users/42/alerts?ticket=" + validTicket).build();
+        MockServerWebExchange sseTicketQueryExchange = MockServerWebExchange.from(sseTicketQueryOnProtectedReq);
+        StepVerifier.create(filter.filter(sseTicketQueryExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, sseTicketQueryExchange.getResponse().getStatusCode());
+    }
+
+    @Test
+    @DisplayName("Validación dual JWT: acepta firma con secreto Base64 decodificado y UTF-8, y rechaza otra clave con 401")
+    void filter_soportaSecretoBase64YUtf8YRechazaOtraClaveCon401() {
+        String base64SignedToken = Jwts.builder()
+                .subject("101")
+                .claim("roles", List.of("BUYER"))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        SecretKey utf8Key = Keys.hmacShaKeyFor(SECRET_BASE64.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String utf8SignedToken = Jwts.builder()
+                .subject("202")
+                .claim("roles", List.of("STORE_ADMIN"))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(utf8Key)
+                .compact();
+
+        SecretKey foreignKey = Keys.hmacShaKeyFor(
+                "OtraClaveCompletamenteDistintaQueNoDebeValidarse2026!".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        String foreignSignedToken = Jwts.builder()
+                .subject("999")
+                .claim("roles", List.of("STYLERADAR_ADMIN"))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(foreignKey)
+                .compact();
+
+        MockServerWebExchange base64Exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/101/store")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + base64SignedToken)
+                        .build()
+        );
+        AtomicBoolean base64Passed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(base64Exchange, ex -> {
+            base64Passed.set(true);
+            assertEquals("101", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            assertEquals("BUYER", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertTrue(base64Passed.get());
+
+        MockServerWebExchange utf8Exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/202/store")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + utf8SignedToken)
+                        .build()
+        );
+        AtomicBoolean utf8Passed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(utf8Exchange, ex -> {
+            utf8Passed.set(true);
+            assertEquals("202", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            assertEquals("STORE_ADMIN", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertTrue(utf8Passed.get());
+
+        MockServerWebExchange foreignExchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/999/store")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + foreignSignedToken)
+                        .build()
+        );
+        AtomicBoolean foreignPassed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(foreignExchange, ex -> {
+            foreignPassed.set(true);
+            return Mono.empty();
+        })).verifyComplete();
+        assertFalse(foreignPassed.get(), "Un token firmado con otra clave jamás debe continuar hacia downstream");
+        assertEquals(HttpStatus.UNAUTHORIZED, foreignExchange.getResponse().getStatusCode());
     }
 }

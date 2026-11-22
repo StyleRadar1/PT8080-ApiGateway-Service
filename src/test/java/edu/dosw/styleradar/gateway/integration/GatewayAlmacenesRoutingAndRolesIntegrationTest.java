@@ -24,6 +24,8 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 /**
  * Verifica el enrutamiento de /api/v1/almacenes/** (Geolocalizacion, Catalogo y Tiendas con prioridad correcta)
  * y la homologacion de roles / X-Almacen-Id hacia los microservicios downstream.
@@ -39,6 +41,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     private static final HttpServer TIENDAS = newServer("ms-tiendas");
     private static final HttpServer PAGOS = newServer("ms-pagos");
     private static final HttpServer USUARIOS = newServer("ms-usuarios");
+    private static final HttpServer NOTIFICACIONES = newServer("ms-notificaciones");
 
     @Autowired
     private WebTestClient webTestClient;
@@ -83,6 +86,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         TIENDAS.stop(0);
         PAGOS.stop(0);
         USUARIOS.stop(0);
+        NOTIFICACIONES.stop(0);
     }
 
     @DynamicPropertySource
@@ -92,6 +96,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         registry.add("TIENDAS_SERVICE_URL", () -> "http://127.0.0.1:" + TIENDAS.getAddress().getPort());
         registry.add("PAGOS_SERVICE_URL", () -> "http://127.0.0.1:" + PAGOS.getAddress().getPort());
         registry.add("USUARIOS_SERVICE_URL", () -> "http://127.0.0.1:" + USUARIOS.getAddress().getPort());
+        registry.add("NOTIFICACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + NOTIFICACIONES.getAddress().getPort());
         registry.add("security.jwt.secret-base64", () -> SECRET);
     }
 
@@ -182,23 +187,147 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
-    @DisplayName("Pagos: rutas reales publicadas por ms-pagos llegan a Pagos (incluido /admin/pagos sobre /admin/**)")
+    @DisplayName("Pagos: rutas reales en español e inglés llegan a Pagos y admin/payments exige rol ADMIN_STYLERADAR")
     void shouldRoutePagosRealPaths() {
-        String token = token("7", List.of("ADMIN_STYLERADAR"), null);
-        for (String uri : List.of("/api/v1/suscripciones/5", "/api/v1/pagos/historial", "/api/v1/admin/pagos")) {
-            webTestClient.get().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
-                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
+        String adminToken = token("7", List.of("STYLERADAR_ADMIN"), null);
+        for (String uri : List.of(
+                "/api/v1/suscripciones/5",
+                "/api/v1/subscriptions/5",
+                "/api/v1/pagos/historial",
+                "/api/v1/payments/history",
+                "/api/v1/plans",
+                "/api/v1/admin/pagos",
+                "/api/v1/admin/payments"
+        )) {
+            webTestClient.get().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken).exchange()
+                    .expectStatus().isOk().expectBody()
+                    .jsonPath("$.service").isEqualTo("ms-pagos")
+                    .jsonPath("$.role").value(role -> assertTrue(role.toString().contains("ADMIN_STYLERADAR")));
         }
+
+        String multiRoleBuyerToken = token("12", List.of("BUYER", "STORE_ADMIN"), null);
+        webTestClient.get().uri("/api/v1/subscriptions/12")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + multiRoleBuyerToken).exchange()
+                .expectStatus().isOk().expectBody()
+                .jsonPath("$.service").isEqualTo("ms-pagos")
+                .jsonPath("$.role").isEqualTo("BUYER,STORE_ADMIN");
+
+        webTestClient.get().uri("/api/v1/admin/payments")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + multiRoleBuyerToken).exchange()
+                .expectStatus().isForbidden();
+
         assertRoutedTo("/api/v1/planes", "ms-pagos");
     }
 
     @Test
-    @DisplayName("Pagos: webhook de MercadoPago es publico (sin JWT) pero las operaciones de pago privadas exigen token")
+    @DisplayName("Pagos: webhook de MercadoPago es publico (sin JWT) pero las operaciones de pago privadas y /plans exigen token")
     void shouldAllowWebhookAndProtectPrivatePagos() {
         webTestClient.post().uri("/api/v1/webhooks/mercadopago").exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
         webTestClient.post().uri("/api/v1/suscripciones/iniciar").exchange().expectStatus().isUnauthorized();
+        webTestClient.post().uri("/api/v1/subscriptions/start").exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri("/api/v1/pagos/historial").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/payments/history").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/plans").exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri("/api/v1/admin/pagos").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/admin/payments").exchange().expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("Tiendas: GET /api/v1/users/{id}/store prioriza ms-tiendas sobre ms-usuarios y foundations/stores son publicos")
+    void shouldRouteUsersStoreAndPublicFoundationsToTiendas() {
+        String token = token("42", List.of("BUYER"), null);
+        webTestClient.get().uri("/api/v1/users/42/store")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
+        webTestClient.get().uri("/api/v1/users/42")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-usuarios");
+        assertRoutedTo("/api/v1/foundations", "ms-tiendas");
+        assertRoutedTo("/api/v1/stores", "ms-tiendas");
+        assertRoutedTo("/api/v1/stores/900555777-1", "ms-tiendas");
+        assertRoutedTo("/api/v1/stores/900555777-1/photos", "ms-tiendas");
+        webTestClient.get().uri("/api/v1/users/42/store").exchange().expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("Notificaciones: alertas, preferencias y alcance estricto del stream SSE con ?ticket= y purpose=sse-stream")
+    void shouldRouteNotificationAlertsPreferencesAndSseTicketToNotificaciones() {
+        String bearerToken = token("42", List.of("BUYER"), null);
+        for (String uri : List.of(
+                "/api/v1/users/42/alerts",
+                "/api/v1/usuarios/42/alertas",
+                "/api/v1/users/42/notification-preferences",
+                "/api/v1/users/42/preferencias-avisos",
+                "/api/v1/usuarios/42/preferencias-avisos"
+        )) {
+            webTestClient.get().uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken).exchange()
+                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
+        }
+
+        SecretKey key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(SECRET.trim()));
+        String sseTicket = Jwts.builder()
+                .subject("42")
+                .claim("purpose", "sse-stream")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(key)
+                .compact();
+        String otherPurposeTicket = Jwts.builder()
+                .subject("42")
+                .claim("purpose", "other")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(key)
+                .compact();
+
+        // 1. Ticket correcto (purpose=sse-stream) abre el stream SSE
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + sseTicket).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
+        webTestClient.get().uri("/api/v1/usuarios/42/notificaciones/stream?ticket=" + sseTicket).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream").exchange()
+                .expectStatus().isUnauthorized();
+
+        // 2. Ticket sin el propósito esperado recibe 401
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + bearerToken).exchange()
+                .expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + otherPurposeTicket).exchange()
+                .expectStatus().isUnauthorized();
+
+        // 3. Ticket SSE usado en una ruta privada normal recibe 401
+        webTestClient.get().uri("/api/v1/users/42/alerts")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + sseTicket).exchange()
+                .expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/users/42")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + sseTicket).exchange()
+                .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("CORS Preflight: autoriza origen exacto del frontend QA y rechaza dominios ajenos del mismo proveedor")
+    void shouldAllowAuthorizedQaFrontendCorsPreflightAndRejectForeignProviderOrigin() {
+        String authorizedQaOrigin = "https://styleradar-qa.azurewebsites.net";
+        webTestClient.options().uri("/api/v1/stores")
+                .header(HttpHeaders.ORIGIN, authorizedQaOrigin)
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, authorizedQaOrigin)
+                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+
+        for (String foreignOrigin : List.of(
+                "https://otro-equipo-ajeno.azurewebsites.net",
+                "https://app-ajena.vercel.app",
+                "https://app-ajena.azurestaticapps.net"
+        )) {
+            webTestClient.options().uri("/api/v1/stores")
+                    .header(HttpHeaders.ORIGIN, foreignOrigin)
+                    .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .exchange()
+                    .expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)
+                    .expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS);
+        }
     }
 }

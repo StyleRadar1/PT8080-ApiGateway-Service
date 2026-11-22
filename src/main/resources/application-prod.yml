@@ -11,6 +11,32 @@ server:
 spring:
   cloud:
     gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "https://styleradar.co"
+              - "https://www.styleradar.co"
+              - "https://app.styleradar.co"
+              - "https://styleradar-prod.azurewebsites.net"
+              - "https://styleradar-frontend-prod.azurewebsites.net"
+              - "https://styleradar-gateway-prod.azurewebsites.net"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            exposedHeaders:
+              - "Retry-After"
+              - "Authorization"
+              - "WWW-Authenticate"
+              - "Location"
+            allowCredentials: true
+            maxAge: 3600
       routes:
         # Swagger OpenAPI Aggregator en PROD
         - id: ms-probador-virtual-swagger
@@ -62,6 +88,13 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
+        - id: ms-pagos-swagger
+          uri: ${PAGOS_SERVICE_URL:https://ca-styleradar-pagos-prod.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io}
+          predicates:
+            - Path=/v3/api-docs/pagos
+          filters:
+            - SetPath=/v3/api-docs
+
         # Paquete 1: Identidad
         - id: ms-auth
           uri: ${AUTH_SERVICE_URL:https://styleradar-auth-prod.azurewebsites.net}
@@ -83,14 +116,15 @@ spring:
             - Method=GET
             - Path=/api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
         - id: ms-tiendas
+          order: -1
           uri: ${TIENDAS_SERVICE_URL:https://styleradar-tiendas-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/stores/**, /api/v1/foundations/**, /api/v1/tiendas/**, /api/v1/almacenes/**, /api/v1/admin/stores/**, /api/v1/admin/foundations/**
+            - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/users/*/store/**, /api/v1/usuarios/*/store, /api/v1/usuarios/*/tienda, /api/v1/tiendas, /api/v1/tiendas/**, /api/v1/almacenes/**, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
 
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
           predicates:
-            - Path=/api/v1/usuarios/**, /api/v1/admin/usuarios/**, /api/v1/admin/**
+            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/users, /api/v1/users/**, /api/v1/admin/usuarios/**, /api/v1/admin/users/**, /api/v1/admin/**
 
         # Paquete 2: Catálogo (RESTrepo · Azure Container Apps)
         - id: ms-inventario
@@ -119,7 +153,7 @@ spring:
           order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/notificaciones/**, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/users/*/notifications
+            - Path=/api/v1/notificaciones, /api/v1/notificaciones/**, /api/v1/notifications, /api/v1/notifications/**, /api/v1/usuarios/*/notificaciones, /api/v1/usuarios/*/notificaciones/**, /api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/usuarios/*/alertas, /api/v1/usuarios/*/alertas/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**, /api/v1/users/*/preferencias-avisos, /api/v1/users/*/preferencias-avisos/**, /api/v1/usuarios/*/preferencias-avisos, /api/v1/usuarios/*/preferencias-avisos/**
 
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
@@ -136,7 +170,7 @@ spring:
           order: -1
           uri: ${PAGOS_SERVICE_URL:https://ca-styleradar-pagos-prod.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/pagos/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/suscripciones/**, /api/v1/planes/**, /api/v1/webhooks/**, /api/v1/admin/pagos/**
+            - Path=/api/v1/pagos, /api/v1/pagos/**, /api/v1/payments, /api/v1/payments/**, /api/v1/subscriptions, /api/v1/subscriptions/**, /api/v1/suscripciones, /api/v1/suscripciones/**, /api/v1/plans, /api/v1/plans/**, /api/v1/planes, /api/v1/planes/**, /api/v1/webhooks, /api/v1/webhooks/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/admin/pagos, /api/v1/admin/pagos/**
 
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:https://styleradar-estadisticas-prod.azurewebsites.net}
