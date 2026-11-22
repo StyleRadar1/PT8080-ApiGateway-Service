@@ -357,7 +357,14 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                     .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
         }
 
-        for (String uri : List.of("/api/v1/playlists", "/api/v1/playlists/me")) {
+        webTestClient.get().uri("/api/v1/playlists")
+                .exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-playlist");
+        webTestClient.get().uri("/api/v1/playlists")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-playlist");
+
+        for (String uri : List.of("/api/v1/playlists/me", "/api/v1/playlists/me/guardadas")) {
             webTestClient.get().uri(uri).exchange().expectStatus().isUnauthorized();
             webTestClient.get().uri(uri)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken).exchange()

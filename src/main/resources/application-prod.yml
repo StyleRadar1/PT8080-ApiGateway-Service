@@ -174,7 +174,7 @@ spring:
             - Path=/api/v1/plans, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/webhooks/mercadopago
 
         - id: ms-estadisticas
-          uri: ${ESTADISTICAS_SERVICE_URL:https://styleradar-estadisticas-prod.azurewebsites.net}
+          uri: ${ESTADISTICAS_SERVICE_URL:https://sr-ms-estadisticas-prod.azurewebsites.net}
           predicates:
             - Path=/api/v1/statistics/**
 

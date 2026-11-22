@@ -97,7 +97,16 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/almacenes/*/novedades",
             "/api/v1/almacenes",
             "/api/v1/almacenes/*/distancia",
-            "/api/v1/fundaciones/cercanas"
+            "/api/v1/fundaciones/cercanas",
+            "/api/v1/playlists",
+            "/api/v1/playlists/",
+            "/api/v1/playlists/*",
+            "/api/v1/playlists/destacadas",
+            "/api/v1/playlists/populares",
+            "/api/v1/inventario/prenda/*",
+            "/api/v1/inventario/prenda/*/disponibilidad",
+            "/api/v1/inventario/sedes/*/disponibles",
+            "/api/v1/inventario/tallas/*/prendas"
     );
 
     private final SecretKey secretKey;
@@ -348,6 +357,8 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
                 || pathMatcher.match("/api/v1/donations/**", path)
                 || pathMatcher.match("/api/v1/prendas/pendientes", path)
                 || pathMatcher.match("/api/v1/prendas/pendientes/**", path)
+                || pathMatcher.match("/api/v1/playlists/me", path)
+                || pathMatcher.match("/api/v1/playlists/me/**", path)
                 || pathMatcher.match("/**/conversations", path)
                 || pathMatcher.match("/**/conversations/**", path)) {
             return false;

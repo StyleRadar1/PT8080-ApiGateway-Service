@@ -835,4 +835,61 @@ class JwtTokenValidatorFilterTest {
             assertEquals(HttpStatus.UNAUTHORIZED, putExchange.getResponse().getStatusCode());
         }
     }
+
+    @Test
+    @DisplayName("Playlists e Inventario: GET públicos permiten acceso anónimo; /playlists/me, /playlists/me/guardadas y mutaciones exigen JWT")
+    void filter_rutasPublicasYProtegidasPlaylistsEInventario() {
+        for (String publicGetPath : List.of(
+                "/api/v1/playlists",
+                "/api/v1/playlists/destacadas",
+                "/api/v1/playlists/populares",
+                "/api/v1/playlists/pl-123",
+                "/api/v1/inventario/prenda/p-1",
+                "/api/v1/inventario/prenda/p-1/disponibilidad",
+                "/api/v1/inventario/sedes/s-1/disponibles",
+                "/api/v1/inventario/tallas/M/prendas"
+        )) {
+            MockServerWebExchange getExchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.get(publicGetPath).build()
+            );
+            AtomicBoolean passed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(getExchange, ex -> {
+                passed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertTrue(passed.get(), "GET " + publicGetPath + " debe permitir acceso anónimo");
+        }
+
+        for (String privateGetPath : List.of(
+                "/api/v1/playlists/me",
+                "/api/v1/playlists/me/guardadas"
+        )) {
+            MockServerWebExchange privExchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.get(privateGetPath).build()
+            );
+            AtomicBoolean passed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(privExchange, ex -> {
+                passed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertFalse(passed.get(), "GET " + privateGetPath + " sin JWT debe retornar 401");
+            assertEquals(HttpStatus.UNAUTHORIZED, privExchange.getResponse().getStatusCode());
+        }
+
+        for (String protectedPostPath : List.of(
+                "/api/v1/playlists",
+                "/api/v1/inventario/reserva"
+        )) {
+            MockServerWebExchange postExchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.post(protectedPostPath).build()
+            );
+            AtomicBoolean passed = new AtomicBoolean(false);
+            StepVerifier.create(filter.filter(postExchange, ex -> {
+                passed.set(true);
+                return Mono.empty();
+            })).verifyComplete();
+            assertFalse(passed.get(), "POST " + protectedPostPath + " sin JWT debe retornar 401");
+            assertEquals(HttpStatus.UNAUTHORIZED, postExchange.getResponse().getStatusCode());
+        }
+    }
 }

@@ -100,6 +100,9 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
 
         assertTrue(routeUriMap.containsKey("ms-geolocalizacion-almacenes"));
         assertTrue(routeUriMap.get("ms-geolocalizacion-almacenes").getHost().contains("rst-geolocation-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io"));
+
+        assertTrue(routeUriMap.containsKey("ms-estadisticas"));
+        assertEquals("sr-ms-estadisticas-qa.azurewebsites.net", routeUriMap.get("ms-estadisticas").getHost());
     }
 
     @Test
