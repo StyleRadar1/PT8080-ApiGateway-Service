@@ -685,17 +685,30 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("SSE Notificaciones: GET .../stream?ticket=<JWT> valida el ticket sin header Authorization y rechaza 401 sin ticket")
+    @DisplayName("SSE Notificaciones: exige claim purpose=sse-stream en ?ticket= y rechaza uso fuera del stream")
     void testFilterAllowsSseNotificationStreamWithValidTicketQueryParam() {
-        String ticket = Jwts.builder()
+        String validTicket = Jwts.builder()
                 .subject("42")
                 .claim("purpose", "sse-stream")
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 60000))
                 .signWith(secretKey)
                 .compact();
+        String ticketWithoutPurpose = Jwts.builder()
+                .subject("42")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(secretKey)
+                .compact();
+        String ticketWrongPurpose = Jwts.builder()
+                .subject("42")
+                .claim("purpose", "access-api")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(secretKey)
+                .compact();
 
-        MockServerHttpRequest validStreamReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + ticket)
+        MockServerHttpRequest validStreamReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + validTicket)
                 .build();
         MockServerWebExchange validExchange = MockServerWebExchange.from(validStreamReq);
         AtomicBoolean chainCalled = new AtomicBoolean(false);
@@ -716,6 +729,33 @@ class JwtTokenValidatorFilterTest {
         MockServerWebExchange invalidExchange = MockServerWebExchange.from(invalidTicketReq);
         StepVerifier.create(filter.filter(invalidExchange, ex -> Mono.empty())).verifyComplete();
         assertEquals(HttpStatus.UNAUTHORIZED, invalidExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest noPurposeReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + ticketWithoutPurpose).build();
+        MockServerWebExchange noPurposeExchange = MockServerWebExchange.from(noPurposeReq);
+        StepVerifier.create(filter.filter(noPurposeExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, noPurposeExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest wrongPurposeReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + ticketWrongPurpose).build();
+        MockServerWebExchange wrongPurposeExchange = MockServerWebExchange.from(wrongPurposeReq);
+        StepVerifier.create(filter.filter(wrongPurposeExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, wrongPurposeExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest sseBearerOnProtectedReq = MockServerHttpRequest.get("/api/v1/users/42/alerts")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + validTicket)
+                .build();
+        MockServerWebExchange sseBearerExchange = MockServerWebExchange.from(sseBearerOnProtectedReq);
+        AtomicBoolean protectedChainCalled = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(sseBearerExchange, ex -> {
+            protectedChainCalled.set(true);
+            return Mono.empty();
+        })).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, sseBearerExchange.getResponse().getStatusCode());
+        assertEquals(false, protectedChainCalled.get());
+
+        MockServerHttpRequest sseTicketQueryOnProtectedReq = MockServerHttpRequest.get("/api/v1/users/42/alerts?ticket=" + validTicket).build();
+        MockServerWebExchange sseTicketQueryExchange = MockServerWebExchange.from(sseTicketQueryOnProtectedReq);
+        StepVerifier.create(filter.filter(sseTicketQueryExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, sseTicketQueryExchange.getResponse().getStatusCode());
     }
 
     @Test

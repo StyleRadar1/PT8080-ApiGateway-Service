@@ -46,6 +46,7 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     public static final String USER_ROLE_HEADER = "X-User-Role";
     public static final String USER_ROLES_HEADER = "X-User-Roles";
     public static final String ALMACEN_ID_HEADER = "X-Almacen-Id";
+    public static final String SSE_STREAM_PURPOSE = "sse-stream";
 
     public static final List<String> DEFAULT_PUBLIC_PATHS = List.of(
             "/actuator/health",
@@ -188,6 +189,8 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         });
 
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        boolean isSseStreamRequest = isSseNotificationStreamRequest(request);
+        boolean fromTicketQueryParam = (authHeader == null || !authHeader.startsWith("Bearer ")) && isSseStreamRequest;
         String effectiveAuthHeader = resolveEffectiveAuthHeader(request, authHeader);
         boolean isPublic = isPublicRequest(request);
 
@@ -210,6 +213,18 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
 
             try {
                 Claims claims = parseSignedClaims(token);
+                String purpose = claims.get("purpose", String.class);
+                boolean isSsePurpose = purpose != null && SSE_STREAM_PURPOSE.equalsIgnoreCase(purpose.trim());
+
+                if (fromTicketQueryParam && !isSsePurpose) {
+                    log.warn("[Gateway] Petición rechazada (401): Ticket SSE sin claim purpose={} hacia {}",
+                            SSE_STREAM_PURPOSE, path);
+                    return onError(exchange, "Ticket SSE inválido: se requiere claim purpose=sse-stream", HttpStatus.UNAUTHORIZED);
+                }
+                if (isSsePurpose && !isSseStreamRequest) {
+                    log.warn("[Gateway] Petición rechazada (401): Token SSE usado fuera del stream permitido hacia {}", path);
+                    return onError(exchange, "Token con propósito sse-stream no está autorizado para acceder a esta ruta", HttpStatus.UNAUTHORIZED);
+                }
 
                 String userId = claims.getSubject();
                 String role = claims.get("role", String.class);

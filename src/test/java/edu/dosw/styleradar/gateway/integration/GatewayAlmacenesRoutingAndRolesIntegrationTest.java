@@ -251,7 +251,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
-    @DisplayName("Notificaciones: alertas, preferencias y stream SSE con ?ticket= llegan a ms-notificaciones")
+    @DisplayName("Notificaciones: alertas, preferencias y alcance estricto del stream SSE con ?ticket= y purpose=sse-stream")
     void shouldRouteNotificationAlertsPreferencesAndSseTicketToNotificaciones() {
         String bearerToken = token("42", List.of("BUYER"), null);
         for (String uri : List.of(
@@ -274,12 +274,34 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                 .expiration(new Date(System.currentTimeMillis() + 60000))
                 .signWith(key)
                 .compact();
+        String otherPurposeTicket = Jwts.builder()
+                .subject("42")
+                .claim("purpose", "other")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60000))
+                .signWith(key)
+                .compact();
 
+        // 1. Ticket correcto (purpose=sse-stream) abre el stream SSE
         webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + sseTicket).exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
         webTestClient.get().uri("/api/v1/usuarios/42/notificaciones/stream?ticket=" + sseTicket).exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
         webTestClient.get().uri("/api/v1/users/42/notifications/stream").exchange()
+                .expectStatus().isUnauthorized();
+
+        // 2. Ticket sin el propósito esperado recibe 401
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + bearerToken).exchange()
+                .expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + otherPurposeTicket).exchange()
+                .expectStatus().isUnauthorized();
+
+        // 3. Ticket SSE usado en una ruta privada normal recibe 401
+        webTestClient.get().uri("/api/v1/users/42/alerts")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + sseTicket).exchange()
+                .expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/users/42")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + sseTicket).exchange()
                 .expectStatus().isUnauthorized();
     }
 
