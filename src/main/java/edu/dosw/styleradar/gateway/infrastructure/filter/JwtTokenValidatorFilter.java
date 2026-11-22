@@ -72,58 +72,29 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     public static final List<String> DEFAULT_PUBLIC_GET_PATHS = List.of(
             "/api/v1/second-hand",
             "/api/v1/second-hand/",
-            "/api/v1/second-hand/*",
             "/api/v1/second-hand/publications",
             "/api/v1/second-hand/publications/",
             "/api/v1/second-hand/publications/*",
-            "/api/v1/second-hand/publications/**",
             "/api/v1/second-hand/photos",
-            "/api/v1/second-hand/photos/",
-            "/api/v1/second-hand/photos/*",
             "/api/v1/second-hand/photos/**",
-            "/api/v1/segunda-mano",
-            "/api/v1/segunda-mano/",
-            "/api/v1/segunda-mano/*",
-            "/api/v1/segunda-mano/publicaciones",
-            "/api/v1/segunda-mano/publicaciones/",
-            "/api/v1/segunda-mano/publicaciones/*",
-            "/api/v1/segunda-mano/publicaciones/**",
-            "/api/v1/segunda-mano/fotos",
-            "/api/v1/segunda-mano/fotos/",
-            "/api/v1/segunda-mano/fotos/*",
-            "/api/v1/segunda-mano/fotos/**",
             "/api/v1/stores",
             "/api/v1/stores/",
             "/api/v1/stores/*",
             "/api/v1/stores/*/photos",
-            "/api/v1/stores/*/photos/**",
-            "/api/v1/tiendas",
-            "/api/v1/tiendas/",
-            "/api/v1/tiendas/*",
-            "/api/v1/tiendas/*/photos",
-            "/api/v1/tiendas/*/fotos",
-            "/api/v1/catalogo",
-            "/api/v1/catalogo/",
-            "/api/v1/catalogo/**",
+            "/api/v1/stores/*/photos/*",
+            "/api/v1/foundations",
+            "/api/v1/foundations/",
             "/api/v1/prendas",
             "/api/v1/prendas/",
-            "/api/v1/prendas/**",
-            "/api/v1/catalog",
-            "/api/v1/catalog/",
-            "/api/v1/catalog/**",
-            "/api/v1/items",
-            "/api/v1/items/",
-            "/api/v1/items/**",
-            "/api/v1/almacenes",
-            "/api/v1/almacenes/*/distancia",
+            "/api/v1/prendas/*",
+            "/api/v1/prendas/*/similares",
+            "/api/v1/catalogo/items/**",
             "/api/v1/almacenes/*/catalogo",
             "/api/v1/almacenes/*/catalogo/resumen",
             "/api/v1/almacenes/*/novedades",
-            "/api/v1/foundations",
-            "/api/v1/foundations/",
-            "/api/v1/fundaciones/cercanas",
-            "/api/v1/planes",
-            "/api/v1/planes/**"
+            "/api/v1/almacenes",
+            "/api/v1/almacenes/*/distancia",
+            "/api/v1/fundaciones/cercanas"
     );
 
     private final SecretKey secretKey;
@@ -312,10 +283,7 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         if (path == null) {
             return false;
         }
-        return pathMatcher.match("/api/v1/users/*/notifications/stream", path)
-                || pathMatcher.match("/api/v1/usuarios/*/notificaciones/stream", path)
-                || pathMatcher.match("/api/v1/notifications/*/stream", path)
-                || pathMatcher.match("/api/v1/notificaciones/*/stream", path);
+        return pathMatcher.match("/api/v1/users/*/notifications/stream", path);
     }
 
     public boolean isPublicRequest(ServerHttpRequest request) {
@@ -370,15 +338,15 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         if (path == null) {
             return false;
         }
-        // Exclusión de seguridad estricta: consultas privadas de donaciones y publicaciones por usuario nunca son anónimas
+        // Exclusión de seguridad estricta: consultas privadas, moderación pendiente y conversaciones nunca son anónimas
         if (pathMatcher.match("/api/v1/second-hand/publications/users/**", path)
                 || pathMatcher.match("/api/v1/second-hand/publications/user/**", path)
                 || pathMatcher.match("/api/v1/second-hand/user/**", path)
-                || pathMatcher.match("/api/v1/segunda-mano/publicaciones/usuarios/**", path)
-                || pathMatcher.match("/api/v1/segunda-mano/publicaciones/usuario/**", path)
-                || pathMatcher.match("/api/v1/segunda-mano/user/**", path)
                 || pathMatcher.match("/api/v1/donations/**", path)
-                || pathMatcher.match("/api/v1/donaciones/**", path)) {
+                || pathMatcher.match("/api/v1/prendas/pendientes", path)
+                || pathMatcher.match("/api/v1/prendas/pendientes/**", path)
+                || pathMatcher.match("/**/conversations", path)
+                || pathMatcher.match("/**/conversations/**", path)) {
             return false;
         }
         return publicGetPaths.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
@@ -435,9 +403,7 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             return false;
         }
         return pathMatcher.match("/api/v1/admin/payments", path)
-                || pathMatcher.match("/api/v1/admin/payments/**", path)
-                || pathMatcher.match("/api/v1/admin/pagos", path)
-                || pathMatcher.match("/api/v1/admin/pagos/**", path);
+                || pathMatcher.match("/api/v1/admin/payments/**", path);
     }
 
     private boolean isPaymentsServicePath(String path) {
@@ -447,16 +413,10 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         return isAdminPaymentsPath(path)
                 || pathMatcher.match("/api/v1/subscriptions", path)
                 || pathMatcher.match("/api/v1/subscriptions/**", path)
-                || pathMatcher.match("/api/v1/suscripciones", path)
-                || pathMatcher.match("/api/v1/suscripciones/**", path)
                 || pathMatcher.match("/api/v1/payments", path)
                 || pathMatcher.match("/api/v1/payments/**", path)
-                || pathMatcher.match("/api/v1/pagos", path)
-                || pathMatcher.match("/api/v1/pagos/**", path)
                 || pathMatcher.match("/api/v1/plans", path)
-                || pathMatcher.match("/api/v1/plans/**", path)
-                || pathMatcher.match("/api/v1/planes", path)
-                || pathMatcher.match("/api/v1/planes/**", path);
+                || pathMatcher.match("/api/v1/plans/**", path);
     }
 
     private static java.util.LinkedHashSet<String> collectRoleTokens(String role, String rolesStr) {

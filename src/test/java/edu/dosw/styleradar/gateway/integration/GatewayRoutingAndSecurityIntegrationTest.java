@@ -131,12 +131,12 @@ class GatewayRoutingAndSecurityIntegrationTest {
             }
         });
 
-        // 3. Endpoint mock para Donaciones (/api/v1/donaciones/health)
-        mockHttpServer.createContext("/api/v1/donaciones/health", exchange -> {
+        // 3. Endpoint mock para Donaciones (/api/v1/donations/foundations)
+        mockHttpServer.createContext("/api/v1/donations/foundations", exchange -> {
             try {
                 exchange.getRequestBody().readAllBytes();
                 String response = "{"
-                        + "\"service\":\"ms-donaciones\","
+                        + "\"service\":\"ms-segunda-vida-donaciones\","
                         + "\"status\":\"UP\""
                         + "}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
@@ -582,17 +582,22 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Enrutamiento con Token: /api/v1/donaciones/** se enruta correctamente con token válido")
+    @DisplayName("Integración Enrutamiento con Token: /api/v1/donations/foundations exige JWT y se enruta con token válido")
     void shouldRouteDonacionesServiceCorrectlyWithValidToken() {
+        webTestClient.get()
+                .uri("/api/v1/donations/foundations")
+                .exchange()
+                .expectStatus().isUnauthorized();
+
         String token = generateValidToken("user-dona-auth", "ROLE_DONANTE");
 
         webTestClient.get()
-                .uri("/api/v1/donaciones/health")
+                .uri("/api/v1/donations/foundations")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
-                .jsonPath("$.service").isEqualTo("ms-donaciones")
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
                 .jsonPath("$.status").isEqualTo("UP");
     }
 

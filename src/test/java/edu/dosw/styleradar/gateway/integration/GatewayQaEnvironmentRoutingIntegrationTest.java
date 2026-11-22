@@ -81,12 +81,25 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertTrue(routeUriMap.get("ms-chat").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
         assertEquals("https", routeUriMap.get("ms-chat").getScheme());
 
+        assertTrue(routeUriMap.containsKey("ms-chat-conversations"));
+        assertTrue(routeUriMap.get("ms-chat-conversations").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
+        assertEquals("https", routeUriMap.get("ms-chat-conversations").getScheme());
+
         assertTrue(routeUriMap.containsKey("ms-chat-ws"));
         assertTrue(routeUriMap.get("ms-chat-ws").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
         assertEquals("wss", routeUriMap.get("ms-chat-ws").getScheme());
 
         assertTrue(routeUriMap.containsKey("ms-usuarios"));
         assertTrue(routeUriMap.get("ms-usuarios").getHost().contains("styleradar-qa-app.azurewebsites.net"));
+
+        assertTrue(routeUriMap.containsKey("ms-playlist"));
+        assertTrue(routeUriMap.get("ms-playlist").getHost().contains("rst-playlist-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io"));
+
+        assertTrue(routeUriMap.containsKey("ms-pagos-suscripciones"));
+        assertTrue(routeUriMap.get("ms-pagos-suscripciones").getHost().contains("ca-styleradar-pagos-juangv1.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io"));
+
+        assertTrue(routeUriMap.containsKey("ms-geolocalizacion-almacenes"));
+        assertTrue(routeUriMap.get("ms-geolocalizacion-almacenes").getHost().contains("rst-geolocation-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io"));
     }
 
     @Test

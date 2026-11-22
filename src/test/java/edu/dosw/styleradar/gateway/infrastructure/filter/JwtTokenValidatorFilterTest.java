@@ -198,7 +198,7 @@ class JwtTokenValidatorFilterTest {
                 .signWith(secretKey)
                 .compact();
 
-        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/catalogo/items")
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/catalogo/items/1/tallas-medidas")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
@@ -237,10 +237,10 @@ class JwtTokenValidatorFilterTest {
         assertFalse(filter.isPublicPath("/actuator/gateway/routes"));
         assertFalse(filter.isPublicPath("/actuator/env"));
         assertFalse(filter.isPublicPath("/api/v1/try-on/jobs"));
-        assertFalse(filter.isPublicPath("/api/v1/probador/siluetas"));
-        assertFalse(filter.isPublicPath("/api/v1/donaciones/campanas"));
-        assertFalse(filter.isPublicPath("/api/v1/inventario/items"));
-        assertFalse(filter.isPublicPath("/api/v1/pagos/checkout"));
+        assertFalse(filter.isPublicPath("/api/v1/try-on/photos/123"));
+        assertFalse(filter.isPublicPath("/api/v1/donations/don-456"));
+        assertFalse(filter.isPublicPath("/api/v1/inventario/1"));
+        assertFalse(filter.isPublicPath("/api/v1/payments/history"));
         assertFalse(filter.isPublicPath(null));
     }
 
@@ -271,105 +271,64 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("Consulta Pública GET vs Rutas Privadas: Permite catálogo público (/second-hand, /publications) pero bloquea donaciones y consultas por usuario")
+    @DisplayName("Consulta Pública GET vs Rutas Privadas: Permite catálogo público (/second-hand, /publications) pero bloquea donaciones, pendientes, conversaciones y consultas por usuario")
     void isPublicRequest_permiteCatalogoPublicoYBloqueaConsultasPrivadas() {
-        // Endpoints públicos del contrato estándar y canónico de Munar
         MockServerHttpRequest getSecondHand = MockServerHttpRequest.get("/api/v1/second-hand").build();
-        MockServerHttpRequest getSecondHandDetail = MockServerHttpRequest.get("/api/v1/second-hand/prenda-123").build();
         MockServerHttpRequest getPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications").build();
         MockServerHttpRequest getPublicationDetail = MockServerHttpRequest.get("/api/v1/second-hand/publications/pub-456").build();
-        MockServerHttpRequest getSegundaMano = MockServerHttpRequest.get("/api/v1/segunda-mano").build();
-        MockServerHttpRequest getSegundaManoDetail = MockServerHttpRequest.get("/api/v1/segunda-mano/prenda-123").build();
-        MockServerHttpRequest getPublicaciones = MockServerHttpRequest.get("/api/v1/segunda-mano/publicaciones").build();
-        MockServerHttpRequest getPublicacionDetail = MockServerHttpRequest.get("/api/v1/segunda-mano/publicaciones/pub-456").build();
 
         assertTrue(filter.isPublicRequest(getSecondHand), "GET /second-hand debe ser público");
-        assertTrue(filter.isPublicRequest(getSecondHandDetail), "GET /second-hand/{id} debe ser público");
         assertTrue(filter.isPublicRequest(getPublications), "GET /second-hand/publications debe ser público");
         assertTrue(filter.isPublicRequest(getPublicationDetail), "GET /second-hand/publications/{id} debe ser público");
-        assertTrue(filter.isPublicRequest(getSegundaMano), "GET /segunda-mano debe ser público");
-        assertTrue(filter.isPublicRequest(getSegundaManoDetail), "GET /segunda-mano/{id} debe ser público");
-        assertTrue(filter.isPublicRequest(getPublicaciones), "GET /segunda-mano/publicaciones debe ser público");
-        assertTrue(filter.isPublicRequest(getPublicacionDetail), "GET /segunda-mano/publicaciones/{id} debe ser público");
 
         MockServerHttpRequest getHealth = MockServerHttpRequest.get("/api/v1/health").build();
-        MockServerHttpRequest getSubPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications/category/shirts").build();
         MockServerHttpRequest getPhotos = MockServerHttpRequest.get("/api/v1/second-hand/photos").build();
+        MockServerHttpRequest getPhotoDetail = MockServerHttpRequest.get("/api/v1/second-hand/photos/123").build();
         assertTrue(filter.isPublicRequest(getHealth), "GET /api/v1/health debe ser público");
-        assertTrue(filter.isPublicRequest(getSubPublications), "GET /second-hand/publications/** debe ser público");
         assertTrue(filter.isPublicRequest(getPhotos), "GET /second-hand/photos debe ser público");
+        assertTrue(filter.isPublicRequest(getPhotoDetail), "GET /second-hand/photos/{id} debe ser público");
 
-        // Rutas privadas del microservicio: consultas por usuario
-        MockServerHttpRequest getUserSecondHand = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
-        MockServerHttpRequest getUserPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications/users/101").build();
-        MockServerHttpRequest getUserSegundaMano = MockServerHttpRequest.get("/api/v1/segunda-mano/user/101").build();
-        MockServerHttpRequest getUsuariosPublicaciones = MockServerHttpRequest.get("/api/v1/segunda-mano/publicaciones/usuarios/101").build();
+        // Rutas privadas: consultas por usuario, moderación pendiente y conversaciones
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/second-hand/user/101").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/second-hand/publications/users/101").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/prendas/pendientes").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/prendas/pendientes/almacenes/1").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/users/conversations").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/stores/conversations").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/stores/900555777-1/conversations").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/10/conversations").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/second-hand/publications/20/conversations").build()));
 
-        assertFalse(filter.isPublicRequest(getUserSecondHand), "GET /second-hand/user/{id} es privado");
-        assertFalse(filter.isPublicRequest(getUserPublications), "GET /second-hand/publications/users/{userId} es privado (requiere propietario o admin)");
-        assertFalse(filter.isPublicRequest(getUserSegundaMano), "GET /segunda-mano/user/{id} es privado");
-        assertFalse(filter.isPublicRequest(getUsuariosPublicaciones), "GET /segunda-mano/publicaciones/usuarios/{userId} es privado");
-
-        // Rutas privadas del microservicio: donaciones (detalle, donante, fundación)
-        MockServerHttpRequest getDonations = MockServerHttpRequest.get("/api/v1/donations").build();
-        MockServerHttpRequest getDonationsDetail = MockServerHttpRequest.get("/api/v1/donations/don-456").build();
-        MockServerHttpRequest getDonationsDonor = MockServerHttpRequest.get("/api/v1/donations/donor/101").build();
-        MockServerHttpRequest getDonationsFoundation = MockServerHttpRequest.get("/api/v1/donations/foundation/501").build();
-        MockServerHttpRequest getDonaciones = MockServerHttpRequest.get("/api/v1/donaciones").build();
-        MockServerHttpRequest getDonacionesDetail = MockServerHttpRequest.get("/api/v1/donaciones/don-456").build();
-        MockServerHttpRequest getDonacionesDonor = MockServerHttpRequest.get("/api/v1/donaciones/donor/101").build();
-        MockServerHttpRequest getDonacionesFoundation = MockServerHttpRequest.get("/api/v1/donaciones/foundation/501").build();
-
-        assertFalse(filter.isPublicRequest(getDonations), "GET /donations no es público");
-        assertFalse(filter.isPublicRequest(getDonationsDetail), "GET /donations/{id} es privado (requiere donante, fundación o admin)");
-        assertFalse(filter.isPublicRequest(getDonationsDonor), "GET /donations/donor/{id} es privado (requiere donante propietario o admin)");
-        assertFalse(filter.isPublicRequest(getDonationsFoundation), "GET /donations/foundation/{id} es privado (requiere fundación receptora o admin)");
-        assertFalse(filter.isPublicRequest(getDonaciones), "GET /donaciones no es público");
-        assertFalse(filter.isPublicRequest(getDonacionesDetail), "GET /donaciones/{id} es privado");
-        assertFalse(filter.isPublicRequest(getDonacionesDonor), "GET /donaciones/donor/{id} es privado");
-        assertFalse(filter.isPublicRequest(getDonacionesFoundation), "GET /donaciones/foundation/{id} es privado");
-
-        MockServerHttpRequest getRepresentative = MockServerHttpRequest.get("/api/v1/donations/foundations/representative").build();
-        assertFalse(filter.isPublicRequest(getRepresentative), "GET /donations/foundations/representative es privado (requiere token)");
+        // Rutas privadas del microservicio: donaciones
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/don-456").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/donors/101").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/foundations/501").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/foundations/representative").build()));
     }
 
     @Test
-    @DisplayName("Filter Consultas Privadas Anónimas: Rechaza con 401 Unauthorized consultas GET privadas de donaciones y usuario")
+    @DisplayName("Filter Consultas Privadas Anónimas: Rechaza con 401 Unauthorized consultas GET privadas de donaciones, conversaciones, pendientes y usuario")
     void filter_consultasPrivadasAnonimas_retorna401Unauthorized() {
-        // 1. Consulta privada de donación por ID
-        MockServerHttpRequest reqDonation = MockServerHttpRequest.get("/api/v1/donations/don-456").build();
-        MockServerWebExchange exDonation = MockServerWebExchange.from(reqDonation);
-        StepVerifier.create(filter.filter(exDonation, ex -> Mono.empty())).verifyComplete();
-        assertEquals(HttpStatus.UNAUTHORIZED, exDonation.getResponse().getStatusCode(),
-                "Acceso anónimo a /api/v1/donations/{id} debe retornar 401");
-
-        // 2. Consulta privada de donaciones por donante
-        MockServerHttpRequest reqDonor = MockServerHttpRequest.get("/api/v1/donations/donor/101").build();
-        MockServerWebExchange exDonor = MockServerWebExchange.from(reqDonor);
-        StepVerifier.create(filter.filter(exDonor, ex -> Mono.empty())).verifyComplete();
-        assertEquals(HttpStatus.UNAUTHORIZED, exDonor.getResponse().getStatusCode(),
-                "Acceso anónimo a /api/v1/donations/donor/{donorId} debe retornar 401");
-
-        // 3. Consulta privada de donaciones por fundación
-        MockServerHttpRequest reqFoundation = MockServerHttpRequest.get("/api/v1/donaciones/foundation/501").build();
-        MockServerWebExchange exFoundation = MockServerWebExchange.from(reqFoundation);
-        StepVerifier.create(filter.filter(exFoundation, ex -> Mono.empty())).verifyComplete();
-        assertEquals(HttpStatus.UNAUTHORIZED, exFoundation.getResponse().getStatusCode(),
-                "Acceso anónimo a /api/v1/donaciones/foundation/{foundationId} debe retornar 401");
-
-        // 4. Consulta privada de publicaciones de un usuario específico (/user/{userId})
-        MockServerHttpRequest reqUserPubs = MockServerHttpRequest.get("/api/v1/second-hand/user/101").build();
-        MockServerWebExchange exUserPubs = MockServerWebExchange.from(reqUserPubs);
-        StepVerifier.create(filter.filter(exUserPubs, ex -> Mono.empty())).verifyComplete();
-        assertEquals(HttpStatus.UNAUTHORIZED, exUserPubs.getResponse().getStatusCode(),
-                "Acceso anónimo a /api/v1/second-hand/user/{userId} debe retornar 401");
-
-        // 5. Consulta privada definitiva de publicaciones por usuario (/publications/users/{userId})
-        MockServerHttpRequest reqDefUserPubs = MockServerHttpRequest.get("/api/v1/second-hand/publications/users/101").build();
-        MockServerWebExchange exDefUserPubs = MockServerWebExchange.from(reqDefUserPubs);
-        StepVerifier.create(filter.filter(exDefUserPubs, ex -> Mono.empty())).verifyComplete();
-        assertEquals(HttpStatus.UNAUTHORIZED, exDefUserPubs.getResponse().getStatusCode(),
-                "Acceso anónimo a /api/v1/second-hand/publications/users/{userId} debe retornar 401");
+        for (String privateUri : List.of(
+                "/api/v1/donations/don-456",
+                "/api/v1/donations/donors/101",
+                "/api/v1/donations/foundations/501",
+                "/api/v1/second-hand/user/101",
+                "/api/v1/second-hand/publications/users/101",
+                "/api/v1/prendas/pendientes",
+                "/api/v1/stores/conversations",
+                "/api/v1/stores/900555777-1/conversations",
+                "/api/v1/users/conversations",
+                "/api/v1/donations/10/conversations",
+                "/api/v1/second-hand/publications/20/conversations"
+        )) {
+            MockServerHttpRequest req = MockServerHttpRequest.get(privateUri).build();
+            MockServerWebExchange ex = MockServerWebExchange.from(req);
+            StepVerifier.create(filter.filter(ex, chainEx -> Mono.empty())).verifyComplete();
+            assertEquals(HttpStatus.UNAUTHORIZED, ex.getResponse().getStatusCode(),
+                    "Acceso anónimo a " + privateUri + " debe retornar 401");
+        }
     }
 
     @Test
@@ -618,10 +577,16 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicRequest(prendasReq), "GET /api/v1/prendas debe ser público");
         MockServerHttpRequest prendasSlashReq = MockServerHttpRequest.get("/api/v1/prendas/").build();
         assertTrue(filter.isPublicRequest(prendasSlashReq), "GET /api/v1/prendas/ debe ser público");
-        MockServerHttpRequest catalogoReq = MockServerHttpRequest.get("/api/v1/catalogo").build();
-        assertTrue(filter.isPublicRequest(catalogoReq), "GET /api/v1/catalogo debe ser público");
-        MockServerHttpRequest catalogoSlashReq = MockServerHttpRequest.get("/api/v1/catalogo/").build();
-        assertTrue(filter.isPublicRequest(catalogoSlashReq), "GET /api/v1/catalogo/ debe ser público");
+        MockServerHttpRequest prendaDetailReq = MockServerHttpRequest.get("/api/v1/prendas/123").build();
+        assertTrue(filter.isPublicRequest(prendaDetailReq), "GET /api/v1/prendas/{id} debe ser público");
+        MockServerHttpRequest prendasSimilaresReq = MockServerHttpRequest.get("/api/v1/prendas/123/similares").build();
+        assertTrue(filter.isPublicRequest(prendasSimilaresReq), "GET /api/v1/prendas/{id}/similares debe ser público");
+        MockServerHttpRequest catalogoTallasReq = MockServerHttpRequest.get("/api/v1/catalogo/items/123/tallas-medidas").build();
+        assertTrue(filter.isPublicRequest(catalogoTallasReq), "GET /api/v1/catalogo/items/{id}/tallas-medidas debe ser público");
+        MockServerHttpRequest almacenesReq = MockServerHttpRequest.get("/api/v1/almacenes").build();
+        assertTrue(filter.isPublicRequest(almacenesReq), "GET /api/v1/almacenes debe ser público");
+        MockServerHttpRequest almacenesCatalogoReq = MockServerHttpRequest.get("/api/v1/almacenes/123/catalogo").build();
+        assertTrue(filter.isPublicRequest(almacenesCatalogoReq), "GET /api/v1/almacenes/{id}/catalogo debe ser público");
         MockServerHttpRequest storesReq = MockServerHttpRequest.get("/api/v1/stores").build();
         assertTrue(filter.isPublicRequest(storesReq), "GET /api/v1/stores debe ser público");
         MockServerHttpRequest storesNitReq = MockServerHttpRequest.get("/api/v1/stores/900555777-1").build();
@@ -633,16 +598,20 @@ class JwtTokenValidatorFilterTest {
         MockServerHttpRequest foundationsReq = MockServerHttpRequest.get("/api/v1/foundations").build();
         assertTrue(filter.isPublicRequest(foundationsReq), "GET /api/v1/foundations debe ser público");
 
-        // Rutas privadas de donaciones y segunda mano
+        // Rutas privadas reales (donaciones, segunda mano por usuario, pendientes de moderación, conversaciones y pagos)
         String[] privatePaths = {
                 "/api/v1/second-hand/publications/users/123",
                 "/api/v1/second-hand/publications/user/123",
                 "/api/v1/second-hand/user/123",
-                "/api/v1/segunda-mano/publicaciones/usuarios/123",
-                "/api/v1/segunda-mano/publicaciones/usuario/123",
-                "/api/v1/segunda-mano/user/123",
                 "/api/v1/donations/my-donations",
-                "/api/v1/donaciones/mis-donaciones"
+                "/api/v1/prendas/pendientes",
+                "/api/v1/prendas/pendientes/almacenes/1/moderacion",
+                "/api/v1/users/conversations",
+                "/api/v1/stores/conversations",
+                "/api/v1/stores/900555777-1/conversations",
+                "/api/v1/donations/10/conversations",
+                "/api/v1/second-hand/publications/20/conversations",
+                "/api/v1/plans"
         };
         for (String p : privatePaths) {
             MockServerHttpRequest req = MockServerHttpRequest.get(p).build();
@@ -725,10 +694,15 @@ class JwtTokenValidatorFilterTest {
         StepVerifier.create(filter.filter(missingExchange, ex -> Mono.empty())).verifyComplete();
         assertEquals(HttpStatus.UNAUTHORIZED, missingExchange.getResponse().getStatusCode());
 
-        MockServerHttpRequest invalidTicketReq = MockServerHttpRequest.get("/api/v1/usuarios/42/notificaciones/stream?ticket=invalido").build();
+        MockServerHttpRequest invalidTicketReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=invalido").build();
         MockServerWebExchange invalidExchange = MockServerWebExchange.from(invalidTicketReq);
         StepVerifier.create(filter.filter(invalidExchange, ex -> Mono.empty())).verifyComplete();
         assertEquals(HttpStatus.UNAUTHORIZED, invalidExchange.getResponse().getStatusCode());
+
+        MockServerHttpRequest legacyAliasSseReq = MockServerHttpRequest.get("/api/v1/usuarios/42/notificaciones/stream?ticket=" + validTicket).build();
+        MockServerWebExchange legacyAliasExchange = MockServerWebExchange.from(legacyAliasSseReq);
+        StepVerifier.create(filter.filter(legacyAliasExchange, ex -> Mono.empty())).verifyComplete();
+        assertEquals(HttpStatus.UNAUTHORIZED, legacyAliasExchange.getResponse().getStatusCode());
 
         MockServerHttpRequest noPurposeReq = MockServerHttpRequest.get("/api/v1/users/42/notifications/stream?ticket=" + ticketWithoutPurpose).build();
         MockServerWebExchange noPurposeExchange = MockServerWebExchange.from(noPurposeReq);

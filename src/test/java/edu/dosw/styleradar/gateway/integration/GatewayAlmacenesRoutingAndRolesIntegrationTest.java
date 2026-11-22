@@ -42,6 +42,10 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     private static final HttpServer PAGOS = newServer("ms-pagos");
     private static final HttpServer USUARIOS = newServer("ms-usuarios");
     private static final HttpServer NOTIFICACIONES = newServer("ms-notificaciones");
+    private static final HttpServer CHAT = newServer("ms-chat");
+    private static final HttpServer INVENTARIO = newServer("ms-inventario");
+    private static final HttpServer PLAYLIST = newServer("ms-playlist");
+    private static final HttpServer DONACIONES = newServer("ms-donaciones");
 
     @Autowired
     private WebTestClient webTestClient;
@@ -87,6 +91,10 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         PAGOS.stop(0);
         USUARIOS.stop(0);
         NOTIFICACIONES.stop(0);
+        CHAT.stop(0);
+        INVENTARIO.stop(0);
+        PLAYLIST.stop(0);
+        DONACIONES.stop(0);
     }
 
     @DynamicPropertySource
@@ -97,6 +105,10 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         registry.add("PAGOS_SERVICE_URL", () -> "http://127.0.0.1:" + PAGOS.getAddress().getPort());
         registry.add("USUARIOS_SERVICE_URL", () -> "http://127.0.0.1:" + USUARIOS.getAddress().getPort());
         registry.add("NOTIFICACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + NOTIFICACIONES.getAddress().getPort());
+        registry.add("CHAT_SERVICE_URL", () -> "http://127.0.0.1:" + CHAT.getAddress().getPort());
+        registry.add("INVENTARIO_SERVICE_URL", () -> "http://127.0.0.1:" + INVENTARIO.getAddress().getPort());
+        registry.add("PLAYLIST_SERVICE_URL", () -> "http://127.0.0.1:" + PLAYLIST.getAddress().getPort());
+        registry.add("DONACIONES_SERVICE_URL", () -> "http://127.0.0.1:" + DONACIONES.getAddress().getPort());
         registry.add("security.jwt.secret-base64", () -> SECRET);
     }
 
@@ -133,17 +145,20 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
-    @DisplayName("Almacenes: el resto de rutas propias de Tiendas continua llegando a Tiendas")
+    @DisplayName("Tiendas: rutas reales (/stores) llegan a Tiendas y rutas obsoletas (/almacenes/{id}) no caen alli")
     void shouldKeepOtherAlmacenesRoutesInTiendas() {
         String token = token("7", List.of("ADMIN_STYLERADAR"), null);
+        webTestClient.get().uri("/api/v1/stores/900555777-1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
+        webTestClient.post().uri("/api/v1/stores")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
         webTestClient.get().uri("/api/v1/almacenes/42")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
-                .expectStatus().isOk()
-                .expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
-        webTestClient.post().uri("/api/v1/almacenes")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
-                .expectStatus().isOk()
-                .expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
+                .expectStatus().isNotFound();
     }
 
     @Test
@@ -187,16 +202,13 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
-    @DisplayName("Pagos: rutas reales en español e inglés llegan a Pagos y admin/payments exige rol ADMIN_STYLERADAR")
+    @DisplayName("Pagos: rutas reales en inglés llegan a Pagos y admin/payments exige rol ADMIN_STYLERADAR")
     void shouldRoutePagosRealPaths() {
         String adminToken = token("7", List.of("STYLERADAR_ADMIN"), null);
         for (String uri : List.of(
-                "/api/v1/suscripciones/5",
                 "/api/v1/subscriptions/5",
-                "/api/v1/pagos/historial",
                 "/api/v1/payments/history",
                 "/api/v1/plans",
-                "/api/v1/admin/pagos",
                 "/api/v1/admin/payments"
         )) {
             webTestClient.get().uri(uri).header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken).exchange()
@@ -215,8 +227,6 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         webTestClient.get().uri("/api/v1/admin/payments")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + multiRoleBuyerToken).exchange()
                 .expectStatus().isForbidden();
-
-        assertRoutedTo("/api/v1/planes", "ms-pagos");
     }
 
     @Test
@@ -224,42 +234,46 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     void shouldAllowWebhookAndProtectPrivatePagos() {
         webTestClient.post().uri("/api/v1/webhooks/mercadopago").exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
-        webTestClient.post().uri("/api/v1/suscripciones/iniciar").exchange().expectStatus().isUnauthorized();
         webTestClient.post().uri("/api/v1/subscriptions/start").exchange().expectStatus().isUnauthorized();
-        webTestClient.get().uri("/api/v1/pagos/historial").exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri("/api/v1/payments/history").exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri("/api/v1/plans").exchange().expectStatus().isUnauthorized();
-        webTestClient.get().uri("/api/v1/admin/pagos").exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri("/api/v1/admin/payments").exchange().expectStatus().isUnauthorized();
     }
 
     @Test
-    @DisplayName("Tiendas: GET /api/v1/users/{id}/store prioriza ms-tiendas sobre ms-usuarios y foundations/stores son publicos")
+    @DisplayName("Tiendas y Usuarios: /users/{id}/store va a Tiendas, /usuarios y /admin/usuarios a Usuarios, y /admin/* desconocido retorna 404")
     void shouldRouteUsersStoreAndPublicFoundationsToTiendas() {
         String token = token("42", List.of("BUYER"), null);
         webTestClient.get().uri("/api/v1/users/42/store")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
-        webTestClient.get().uri("/api/v1/users/42")
+        webTestClient.get().uri("/api/v1/usuarios/42")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-usuarios");
+        webTestClient.get().uri("/api/v1/admin/usuarios")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-usuarios");
+        webTestClient.get().uri("/api/v1/admin/inexistente")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isNotFound();
         assertRoutedTo("/api/v1/foundations", "ms-tiendas");
         assertRoutedTo("/api/v1/stores", "ms-tiendas");
         assertRoutedTo("/api/v1/stores/900555777-1", "ms-tiendas");
         assertRoutedTo("/api/v1/stores/900555777-1/photos", "ms-tiendas");
         webTestClient.get().uri("/api/v1/users/42/store").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/usuarios/42").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/admin/usuarios").exchange().expectStatus().isUnauthorized();
     }
 
     @Test
-    @DisplayName("Notificaciones: alertas, preferencias y alcance estricto del stream SSE con ?ticket= y purpose=sse-stream")
+    @DisplayName("Notificaciones: alertas, preferencias y alcance estricto del stream SSE en rutas reales con ?ticket= y purpose=sse-stream")
     void shouldRouteNotificationAlertsPreferencesAndSseTicketToNotificaciones() {
         String bearerToken = token("42", List.of("BUYER"), null);
         for (String uri : List.of(
                 "/api/v1/users/42/alerts",
-                "/api/v1/usuarios/42/alertas",
+                "/api/v1/users/42/alerts/10",
                 "/api/v1/users/42/notification-preferences",
-                "/api/v1/users/42/preferencias-avisos",
-                "/api/v1/usuarios/42/preferencias-avisos"
+                "/api/v1/users/42/notification-preferences/EMAIL"
         )) {
             webTestClient.get().uri(uri)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken).exchange()
@@ -282,12 +296,12 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                 .signWith(key)
                 .compact();
 
-        // 1. Ticket correcto (purpose=sse-stream) abre el stream SSE
+        // 1. Ticket correcto (purpose=sse-stream) abre el stream SSE real
         webTestClient.get().uri("/api/v1/users/42/notifications/stream?ticket=" + sseTicket).exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
-        webTestClient.get().uri("/api/v1/usuarios/42/notificaciones/stream?ticket=" + sseTicket).exchange()
-                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
         webTestClient.get().uri("/api/v1/users/42/notifications/stream").exchange()
+                .expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/usuarios/42/notificaciones/stream?ticket=" + sseTicket).exchange()
                 .expectStatus().isUnauthorized();
 
         // 2. Ticket sin el propósito esperado recibe 401
@@ -300,9 +314,55 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         webTestClient.get().uri("/api/v1/users/42/alerts")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + sseTicket).exchange()
                 .expectStatus().isUnauthorized();
-        webTestClient.get().uri("/api/v1/users/42")
+        webTestClient.get().uri("/api/v1/usuarios/42")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + sseTicket).exchange()
                 .expectStatus().isUnauthorized();
+    }
+
+    @Test
+    @DisplayName("Chat: las 5 rutas de conversaciones exigen JWT y llegan a ms-chat sin colisionar con Usuarios, Tiendas ni Donaciones")
+    void shouldRouteAllFiveChatConversationEndpointsToChatAndRequireJwt() {
+        String bearerToken = token("42", List.of("BUYER"), null);
+        for (String uri : List.of(
+                "/api/v1/users/conversations",
+                "/api/v1/stores/conversations",
+                "/api/v1/stores/900555777-1/conversations",
+                "/api/v1/donations/10/conversations",
+                "/api/v1/second-hand/publications/20/conversations"
+        )) {
+            webTestClient.get().uri(uri).exchange().expectStatus().isUnauthorized();
+            webTestClient.get().uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken).exchange()
+                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-chat");
+            webTestClient.post().uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + bearerToken).exchange()
+                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-chat");
+        }
+    }
+
+    @Test
+    @DisplayName("Catalogo, Inventario y Playlists: prendas/pendientes exige JWT y raices /inventario y /playlists enrutan correctamente")
+    void shouldProtectPrendasPendientesAndRouteInventarioAndPlaylistsRoots() {
+        String adminToken = token("7", List.of("STYLERADAR_ADMIN"), null);
+        webTestClient.get().uri("/api/v1/prendas/pendientes").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/prendas/pendientes")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-item-catalogo");
+
+        String buyerToken = token("42", List.of("BUYER"), null);
+        for (String uri : List.of("/api/v1/inventario", "/api/v1/inventario/1")) {
+            webTestClient.get().uri(uri).exchange().expectStatus().isUnauthorized();
+            webTestClient.get().uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken).exchange()
+                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
+        }
+
+        for (String uri : List.of("/api/v1/playlists", "/api/v1/playlists/me")) {
+            webTestClient.get().uri(uri).exchange().expectStatus().isUnauthorized();
+            webTestClient.get().uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken).exchange()
+                    .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-playlist");
+        }
     }
 
     @Test
