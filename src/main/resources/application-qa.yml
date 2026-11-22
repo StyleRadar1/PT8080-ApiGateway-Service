@@ -11,6 +11,31 @@ server:
 spring:
   cloud:
     gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:5173"
+              - "http://localhost:3000"
+              - "https://styleradar-qa.azurewebsites.net"
+              - "https://styleradar-frontend-qa.azurewebsites.net"
+              - "https://styleradar-gateway-qa.azurewebsites.net"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            exposedHeaders:
+              - "Retry-After"
+              - "Authorization"
+              - "WWW-Authenticate"
+              - "Location"
+            allowCredentials: true
+            maxAge: 3600
       routes:
         # Swagger OpenAPI Aggregator en QA
         - id: ms-probador-virtual-swagger

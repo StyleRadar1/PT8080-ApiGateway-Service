@@ -11,6 +11,32 @@ server:
 spring:
   cloud:
     gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "https://styleradar.co"
+              - "https://www.styleradar.co"
+              - "https://app.styleradar.co"
+              - "https://styleradar-prod.azurewebsites.net"
+              - "https://styleradar-frontend-prod.azurewebsites.net"
+              - "https://styleradar-gateway-prod.azurewebsites.net"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            exposedHeaders:
+              - "Retry-After"
+              - "Authorization"
+              - "WWW-Authenticate"
+              - "Location"
+            allowCredentials: true
+            maxAge: 3600
       routes:
         # Swagger OpenAPI Aggregator en PROD
         - id: ms-probador-virtual-swagger

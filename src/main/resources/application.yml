@@ -14,12 +14,13 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOriginPatterns:
-              - "http://localhost:*"
-              - "https://*.styleradar.co"
-              - "https://*.azurewebsites.net"
-              - "https://*.azurestaticapps.net"
-              - "https://*.vercel.app"
+            allowedOrigins:
+              - "http://localhost:5173"
+              - "http://localhost:3000"
+              - "http://localhost:8080"
+              - "https://styleradar-qa.azurewebsites.net"
+              - "https://styleradar-frontend-qa.azurewebsites.net"
+              - "https://styleradar-gateway-qa.azurewebsites.net"
             allowedMethods:
               - GET
               - POST

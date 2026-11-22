@@ -717,4 +717,77 @@ class JwtTokenValidatorFilterTest {
         StepVerifier.create(filter.filter(invalidExchange, ex -> Mono.empty())).verifyComplete();
         assertEquals(HttpStatus.UNAUTHORIZED, invalidExchange.getResponse().getStatusCode());
     }
+
+    @Test
+    @DisplayName("Validación dual JWT: acepta firma con secreto Base64 decodificado y UTF-8, y rechaza otra clave con 401")
+    void filter_soportaSecretoBase64YUtf8YRechazaOtraClaveCon401() {
+        String base64SignedToken = Jwts.builder()
+                .subject("101")
+                .claim("roles", List.of("BUYER"))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        SecretKey utf8Key = Keys.hmacShaKeyFor(SECRET_BASE64.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String utf8SignedToken = Jwts.builder()
+                .subject("202")
+                .claim("roles", List.of("STORE_ADMIN"))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(utf8Key)
+                .compact();
+
+        SecretKey foreignKey = Keys.hmacShaKeyFor(
+                "OtraClaveCompletamenteDistintaQueNoDebeValidarse2026!".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        );
+        String foreignSignedToken = Jwts.builder()
+                .subject("999")
+                .claim("roles", List.of("STYLERADAR_ADMIN"))
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(foreignKey)
+                .compact();
+
+        MockServerWebExchange base64Exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/101/store")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + base64SignedToken)
+                        .build()
+        );
+        AtomicBoolean base64Passed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(base64Exchange, ex -> {
+            base64Passed.set(true);
+            assertEquals("101", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            assertEquals("BUYER", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertTrue(base64Passed.get());
+
+        MockServerWebExchange utf8Exchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/202/store")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + utf8SignedToken)
+                        .build()
+        );
+        AtomicBoolean utf8Passed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(utf8Exchange, ex -> {
+            utf8Passed.set(true);
+            assertEquals("202", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            assertEquals("STORE_ADMIN", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertTrue(utf8Passed.get());
+
+        MockServerWebExchange foreignExchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get("/api/v1/users/999/store")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + foreignSignedToken)
+                        .build()
+        );
+        AtomicBoolean foreignPassed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(foreignExchange, ex -> {
+            foreignPassed.set(true);
+            return Mono.empty();
+        })).verifyComplete();
+        assertFalse(foreignPassed.get(), "Un token firmado con otra clave jamás debe continuar hacia downstream");
+        assertEquals(HttpStatus.UNAUTHORIZED, foreignExchange.getResponse().getStatusCode());
+    }
 }

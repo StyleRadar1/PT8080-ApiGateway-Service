@@ -328,7 +328,7 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-        } catch (io.jsonwebtoken.security.SignatureException ex) {
+        } catch (io.jsonwebtoken.security.SecurityException ex) {
             if (utf8FallbackKey != null) {
                 return Jwts.parser()
                         .verifyWith(utf8FallbackKey)
