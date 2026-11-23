@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: pt8080-apigateway-service
+  codec:
+    max-in-memory-size: 2MB
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   cloud:
@@ -19,6 +21,7 @@ spring:
               - "http://localhost:3000"
               - "http://localhost:8080"
               - "https://styleradar-qa.azurewebsites.net"
+              - "https://styleradar-qa.vercel.app"
               - "https://styleradar-frontend-qa.azurewebsites.net"
               - "https://styleradar-gateway-qa.azurewebsites.net"
             allowedMethods:

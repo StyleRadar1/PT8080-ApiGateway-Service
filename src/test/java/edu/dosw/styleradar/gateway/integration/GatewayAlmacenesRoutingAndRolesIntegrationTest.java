@@ -47,6 +47,27 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     private static final HttpServer PLAYLIST = newServer("ms-playlist");
     private static final HttpServer DONACIONES = newServer("ms-donaciones");
 
+    static {
+        USUARIOS.createContext("/v3/api-docs", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String openApiBody = "{"
+                        + "\"openapi\":\"3.0.1\","
+                        + "\"servers\":[{\"url\":\"http://localhost:8120\",\"description\":\"Local ms-usuarios\"}],"
+                        + "\"paths\":{\"/api/v1/usuarios\":{\"post\":{\"summary\":\"Registrar usuario\"}}}"
+                        + "}";
+                byte[] bytes = openApiBody.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+    }
+
     @Autowired
     private WebTestClient webTestClient;
 
@@ -375,14 +396,18 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     @Test
     @DisplayName("CORS Preflight: autoriza origen exacto del frontend QA y rechaza dominios ajenos del mismo proveedor")
     void shouldAllowAuthorizedQaFrontendCorsPreflightAndRejectForeignProviderOrigin() {
-        String authorizedQaOrigin = "https://styleradar-qa.azurewebsites.net";
-        webTestClient.options().uri("/api/v1/stores")
-                .header(HttpHeaders.ORIGIN, authorizedQaOrigin)
-                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
-                .exchange()
-                .expectStatus().isOk()
-                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, authorizedQaOrigin)
-                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+        for (String authorizedQaOrigin : List.of(
+                "https://styleradar-qa.azurewebsites.net",
+                "https://styleradar-qa.vercel.app"
+        )) {
+            webTestClient.options().uri("/api/v1/stores")
+                    .header(HttpHeaders.ORIGIN, authorizedQaOrigin)
+                    .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, authorizedQaOrigin)
+                    .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+        }
 
         for (String foreignOrigin : List.of(
                 "https://otro-equipo-ajeno.azurewebsites.net",
@@ -396,5 +421,29 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                     .expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)
                     .expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS);
         }
+    }
+
+    @Test
+    @DisplayName("Swagger Aggregator: /v3/api-docs/usuarios expone '/' como primer server y POST /api/v1/usuarios pasa sin JWT")
+    void shouldRewriteUsuariosOpenApiServersToGatewayAndAllowPublicPostRegistration() {
+        webTestClient.get().uri("/v3/api-docs/usuarios")
+                .header(HttpHeaders.ACCEPT_ENCODING, "gzip")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.servers[0].url").isEqualTo("/")
+                .jsonPath("$.servers[1].url").isEqualTo("http://localhost:8120")
+                .jsonPath("$.paths['/api/v1/usuarios'].post.summary").isEqualTo("Registrar usuario");
+
+        webTestClient.post().uri("/api/v1/usuarios")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-usuarios")
+                .jsonPath("$.path").isEqualTo("/api/v1/usuarios");
+
+        webTestClient.get().uri("/v3/api-docs/swagger-config")
+                .exchange()
+                .expectStatus().isOk();
     }
 }
