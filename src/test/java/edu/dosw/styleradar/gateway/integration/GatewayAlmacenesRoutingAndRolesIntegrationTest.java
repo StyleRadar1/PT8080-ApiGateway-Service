@@ -375,14 +375,18 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     @Test
     @DisplayName("CORS Preflight: autoriza origen exacto del frontend QA y rechaza dominios ajenos del mismo proveedor")
     void shouldAllowAuthorizedQaFrontendCorsPreflightAndRejectForeignProviderOrigin() {
-        String authorizedQaOrigin = "https://styleradar-qa.azurewebsites.net";
-        webTestClient.options().uri("/api/v1/stores")
-                .header(HttpHeaders.ORIGIN, authorizedQaOrigin)
-                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
-                .exchange()
-                .expectStatus().isOk()
-                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, authorizedQaOrigin)
-                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+        for (String authorizedQaOrigin : List.of(
+                "https://styleradar-qa.azurewebsites.net",
+                "https://styleradar-qa.vercel.app"
+        )) {
+            webTestClient.options().uri("/api/v1/stores")
+                    .header(HttpHeaders.ORIGIN, authorizedQaOrigin)
+                    .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, authorizedQaOrigin)
+                    .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+        }
 
         for (String foreignOrigin : List.of(
                 "https://otro-equipo-ajeno.azurewebsites.net",

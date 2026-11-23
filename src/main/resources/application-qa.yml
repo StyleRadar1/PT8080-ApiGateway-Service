@@ -18,6 +18,7 @@ spring:
               - "http://localhost:5173"
               - "http://localhost:3000"
               - "https://styleradar-qa.azurewebsites.net"
+              - "https://styleradar-qa.vercel.app"
               - "https://styleradar-frontend-qa.azurewebsites.net"
               - "https://styleradar-gateway-qa.azurewebsites.net"
             allowedMethods:
