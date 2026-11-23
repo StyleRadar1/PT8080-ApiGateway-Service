@@ -278,3 +278,9 @@ springdoc:
 security:
   jwt:
     secret-base64: ${JWT_SECRET_BASE64:${JWT_SECRET:}}
+
+# Resiliencia del CircuitBreaker para rutas con procesamiento pesado o cold-start en Azure (Try-On, Donaciones)
+styleradar:
+  gateway:
+    circuit-breaker:
+      timeout-seconds: ${GATEWAY_CIRCUIT_BREAKER_TIMEOUT_SECONDS:30}
