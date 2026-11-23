@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
@@ -16,6 +17,31 @@ public class FallbackController {
 
     @GetMapping("/probador")
     public Mono<ResponseEntity<Map<String, Object>>> fallbackProbador() {
+        return buildProbadorFallback();
+    }
+
+    @RequestMapping(
+            value = "/probador",
+            method = {RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE}
+    )
+    public Mono<ResponseEntity<Map<String, Object>>> fallbackProbadorMutation() {
+        return buildProbadorFallback();
+    }
+
+    @GetMapping("/general")
+    public Mono<ResponseEntity<Map<String, Object>>> fallbackGeneral() {
+        return buildGeneralFallback();
+    }
+
+    @RequestMapping(
+            value = "/general",
+            method = {RequestMethod.POST, RequestMethod.PUT, RequestMethod.PATCH, RequestMethod.DELETE}
+    )
+    public Mono<ResponseEntity<Map<String, Object>>> fallbackGeneralMutation() {
+        return buildGeneralFallback();
+    }
+
+    private Mono<ResponseEntity<Map<String, Object>>> buildProbadorFallback() {
         Map<String, Object> body = Map.of(
                 "status", HttpStatus.SERVICE_UNAVAILABLE.value(),
                 "error", "Servicio No Disponible",
@@ -26,8 +52,7 @@ public class FallbackController {
         return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body));
     }
 
-    @GetMapping("/general")
-    public Mono<ResponseEntity<Map<String, Object>>> fallbackGeneral() {
+    private Mono<ResponseEntity<Map<String, Object>>> buildGeneralFallback() {
         Map<String, Object> body = Map.of(
                 "status", HttpStatus.SERVICE_UNAVAILABLE.value(),
                 "error", "Microservicio No Disponible",

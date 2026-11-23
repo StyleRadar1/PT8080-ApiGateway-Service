@@ -111,6 +111,28 @@ class GatewayRoutingAndSecurityIntegrationTest {
             }
         });
 
+        // 1b. Endpoint mock lento (> 1s) para validar TimeLimiter extendido del CircuitBreaker
+        mockHttpServer.createContext("/api/v1/try-on/slow-upload", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                try {
+                    Thread.sleep(1300L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+                String response = "{\"service\":\"ms-probador-virtual\",\"status\":\"UPLOADED\"}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
         // 2. Endpoint mock para Swagger OpenAPI del Probador (/v3/api-docs)
         mockHttpServer.createContext("/v3/api-docs", exchange -> {
             try {
@@ -841,5 +863,20 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
                 .jsonPath("$.receivedUserId").isEqualTo("user-rep-505")
                 .jsonPath("$.foundationName").isEqualTo("Fundacion Abrigo Solidario");
+    }
+
+    @Test
+    @DisplayName("Integración Resiliencia: POST Try-On > 1s completa con 200 OK sin disparar TimeLimiter por defecto")
+    void shouldAllowSlowTryOnPostBeyondDefaultOneSecondTimeout() {
+        String token = generateValidToken("user-tryon-slow", "ROLE_BUYER");
+
+        webTestClient.post()
+                .uri("/api/v1/try-on/slow-upload")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-probador-virtual")
+                .jsonPath("$.status").isEqualTo("UPLOADED");
     }
 }
