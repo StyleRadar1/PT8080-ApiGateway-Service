@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: pt8080-apigateway-service
+  codec:
+    max-in-memory-size: 2MB
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   cloud:
