@@ -36,6 +36,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.Date;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -123,6 +127,51 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 String response = "{\"service\":\"ms-probador-virtual\",\"status\":\"UPLOADED\"}";
                 byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 1c. Endpoint mock estricto que rechaza peticiones con header Origin (reproduce fallo real de QA)
+        mockHttpServer.createContext("/api/v1/try-on/cors-strict", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                String forwardedOrigin = exchange.getRequestHeaders().getFirst("Origin");
+                int status = forwardedOrigin != null ? 403 : 200;
+                String contentType = forwardedOrigin != null ? "text/plain;charset=UTF-8" : "application/json";
+                String response = forwardedOrigin != null
+                        ? "Invalid CORS request"
+                        : "{\"service\":\"ms-probador-virtual\",\"receivedOrigin\":\"none\"}";
+                byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", contentType);
+                exchange.sendResponseHeaders(status, bytes.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(bytes);
+                    os.flush();
+                }
+            } finally {
+                exchange.close();
+            }
+        });
+
+        // 1d. Endpoint mock que simula microservicio emitiendo cabeceras CORS no autorizadas y Vary propio
+        mockHttpServer.createContext("/api/v1/donations/cors-dup", exchange -> {
+            try {
+                exchange.getRequestBody().readAllBytes();
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+                exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
+                exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "Location, X-Internal-Debug");
+                exchange.getResponseHeaders().add("Vary", "Origin");
+                exchange.getResponseHeaders().add("Vary", "Access-Control-Request-Method");
+                exchange.getResponseHeaders().add("Vary", "Accept-Encoding");
+                byte[] bytes = "{\"service\":\"ms-segunda-vida-donaciones\",\"status\":\"OK\"}"
+                        .getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, bytes.length);
                 try (OutputStream os = exchange.getResponseBody()) {
                     os.write(bytes);
@@ -878,5 +927,104 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-probador-virtual")
                 .jsonPath("$.status").isEqualTo("UPLOADED");
+    }
+
+    @Test
+    @DisplayName("Integración CORS Perimetral: remueve Origin hacia downstream estricto y responde un único header CORS para Vercel/Vite")
+    void shouldStripOriginTowardsStrictDownstreamAndReturnSingleGatewayCorsHeader() {
+        String token = generateValidToken("user-cors-qa", "ROLE_BUYER");
+
+        for (String origin : List.of("https://styleradar-qa.vercel.app", "http://localhost:5173")) {
+            var result = webTestClient.get()
+                    .uri("/api/v1/try-on/cors-strict")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .header(HttpHeaders.ORIGIN, origin)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.receivedOrigin").isEqualTo("none")
+                    .returnResult();
+
+            HttpHeaders responseHeaders = result.getResponseHeaders();
+            org.junit.jupiter.api.Assertions.assertEquals(
+                    List.of(origin),
+                    responseHeaders.get(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)
+            );
+            org.junit.jupiter.api.Assertions.assertEquals(
+                    List.of("true"),
+                    responseHeaders.get(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)
+            );
+        }
+
+        webTestClient.get()
+                .uri("/api/v1/try-on/cors-strict")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.ORIGIN, "https://sitio-ajeno.vercel.app")
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
+    }
+
+    @Test
+    @DisplayName("Integración CORS Perimetral: restringe Expose-Headers a los autorizados por el Gateway y preserva Vary del microservicio")
+    void shouldDeduplicateDownstreamCorsResponseHeadersKeepingGatewayOrigin() {
+        String token = generateValidToken("user-cors-don", "ROLE_BUYER");
+
+        var result = webTestClient.get()
+                .uri("/api/v1/donations/cors-dup")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(HttpHeaders.ORIGIN, "https://styleradar-qa.vercel.app")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .returnResult();
+
+        HttpHeaders responseHeaders = result.getResponseHeaders();
+        org.junit.jupiter.api.Assertions.assertEquals(
+                List.of("https://styleradar-qa.vercel.app"),
+                responseHeaders.get(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(
+                List.of("true"),
+                responseHeaders.get(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS)
+        );
+
+        List<String> exposeHeaders = responseHeaders.get(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS);
+        org.junit.jupiter.api.Assertions.assertNotNull(exposeHeaders);
+        org.junit.jupiter.api.Assertions.assertEquals(1, exposeHeaders.size());
+        String exposeValue = exposeHeaders.get(0);
+        org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("Retry-After"));
+        org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("Authorization"));
+        org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("WWW-Authenticate"));
+        org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("Location"));
+        org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("Content-Disposition"));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                exposeValue.contains("X-Internal-Debug"),
+                "No debe exponer cabeceras adicionales emitidas únicamente por el microservicio downstream"
+        );
+        org.junit.jupiter.api.Assertions.assertEquals(
+                exposeValue.indexOf("Location"),
+                exposeValue.lastIndexOf("Location"),
+                "Location no debe aparecer duplicado en Access-Control-Expose-Headers"
+        );
+
+        List<String> varyHeaders = responseHeaders.get(HttpHeaders.VARY);
+        org.junit.jupiter.api.Assertions.assertNotNull(varyHeaders);
+        Set<String> uniqueVary = new LinkedHashSet<>();
+        for (String rawVary : varyHeaders) {
+            for (String tokenVary : rawVary.split(",")) {
+                String trimmed = tokenVary.trim().toLowerCase(Locale.ROOT);
+                org.junit.jupiter.api.Assertions.assertTrue(
+                        uniqueVary.add(trimmed),
+                        "Header Vary contiene valor duplicado: " + tokenVary
+                );
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(
+                uniqueVary.contains("accept-encoding"),
+                "Vary debe conservar los valores aportados por el microservicio downstream"
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(uniqueVary.contains("origin"));
     }
 }
