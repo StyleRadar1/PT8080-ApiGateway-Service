@@ -111,7 +111,9 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
 
     public static final List<String> DEFAULT_PUBLIC_POST_PATHS = List.of(
             "/api/v1/usuarios",
-            "/api/v1/usuarios/"
+            "/api/v1/usuarios/",
+            "/api/v1/users",
+            "/api/v1/users/"
     );
 
     private final SecretKey secretKey;

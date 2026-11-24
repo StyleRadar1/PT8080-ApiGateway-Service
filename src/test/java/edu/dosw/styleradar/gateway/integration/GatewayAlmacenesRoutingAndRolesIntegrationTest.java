@@ -476,4 +476,96 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                 .exchange()
                 .expectStatus().isOk();
     }
+
+    @Test
+    @DisplayName("Usuarios en ingles y precedencia: enruta /api/v1/users y /admin/users sin colisionar con Chat, Tiendas ni Notificaciones")
+    void shouldRouteEnglishUsersEndpointsAndKeepPrecedenceOverChatTiendasNotifications() {
+        webTestClient.options().uri("/api/v1/users")
+                .header(HttpHeaders.ORIGIN, "https://styleradar-qa.vercel.app")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://styleradar-qa.vercel.app");
+
+        webTestClient.post().uri("/api/v1/users")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-usuarios")
+                .jsonPath("$.path").isEqualTo("/api/v1/users");
+
+        String buyerToken = token("12", List.of("BUYER"), null);
+        String adminToken = token("1", List.of("STYLERADAR_ADMIN"), null);
+
+        for (String userReadUri : List.of(
+                "/api/v1/users/12",
+                "/api/v1/users/12/feed",
+                "/api/v1/users/12/recommendations",
+                "/api/v1/users/12/saved-searches",
+                "/api/v1/admin/users"
+        )) {
+            webTestClient.get().uri(userReadUri).exchange().expectStatus().isUnauthorized();
+            String authToken = userReadUri.startsWith("/api/v1/admin/") ? adminToken : buyerToken;
+            webTestClient.get().uri(userReadUri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + authToken)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody().jsonPath("$.service").isEqualTo("ms-usuarios");
+        }
+
+        for (String userPutUri : List.of(
+                "/api/v1/users/12",
+                "/api/v1/users/12/sizes",
+                "/api/v1/users/12/style-preferences"
+        )) {
+            webTestClient.put().uri(userPutUri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody().jsonPath("$.service").isEqualTo("ms-usuarios");
+        }
+
+        webTestClient.patch().uri("/api/v1/admin/users/12/status")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.service").isEqualTo("ms-usuarios");
+
+        webTestClient.get().uri("/api/v1/users/conversations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.service").isEqualTo("ms-chat");
+
+        webTestClient.get().uri("/api/v1/users/12/store")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
+
+        for (String notifUri : List.of(
+                "/api/v1/users/me/notifications",
+                "/api/v1/users/me/alerts",
+                "/api/v1/users/me/notification-preferences"
+        )) {
+            webTestClient.get().uri(notifUri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+                    .exchange()
+                    .expectStatus().isOk()
+                    .expectBody().jsonPath("$.service").isEqualTo("ms-notificaciones");
+        }
+
+        webTestClient.get().uri("/api/v1/plans/1")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + buyerToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
+
+        webTestClient.get().uri("/api/v1/admin/payments/99")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody().jsonPath("$.service").isEqualTo("ms-pagos");
+    }
 }
