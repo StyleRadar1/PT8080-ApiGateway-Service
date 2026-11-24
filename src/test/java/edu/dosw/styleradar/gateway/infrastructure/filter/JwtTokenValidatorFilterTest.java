@@ -898,7 +898,7 @@ class JwtTokenValidatorFilterTest {
     void filter_registroUsuariosPostPublicoYSubrutasProtegidas() {
         assertFalse(filter.isPublicPostPath(null));
 
-        for (String publicPostUri : List.of("/api/v1/usuarios", "/api/v1/usuarios/")) {
+        for (String publicPostUri : List.of("/api/v1/usuarios", "/api/v1/usuarios/", "/api/v1/users", "/api/v1/users/")) {
             MockServerWebExchange postAnon = MockServerWebExchange.from(
                     MockServerHttpRequest.post(publicPostUri).build()
             );
@@ -928,7 +928,14 @@ class JwtTokenValidatorFilterTest {
                 MockServerHttpRequest.get("/api/v1/usuarios/me").build(),
                 MockServerHttpRequest.put("/api/v1/usuarios/me").build(),
                 MockServerHttpRequest.delete("/api/v1/usuarios/1").build(),
-                MockServerHttpRequest.post("/api/v1/usuarios/me/busquedas-guardadas").build()
+                MockServerHttpRequest.post("/api/v1/usuarios/me/busquedas-guardadas").build(),
+                MockServerHttpRequest.get("/api/v1/users").build(),
+                MockServerHttpRequest.get("/api/v1/users/12").build(),
+                MockServerHttpRequest.put("/api/v1/users/12").build(),
+                MockServerHttpRequest.get("/api/v1/users/12/feed").build(),
+                MockServerHttpRequest.post("/api/v1/users/12/saved-searches").build(),
+                MockServerHttpRequest.get("/api/v1/admin/users").build(),
+                MockServerHttpRequest.patch("/api/v1/admin/users/12/status").build()
         )) {
             MockServerWebExchange ex = MockServerWebExchange.from(protectedReq);
             AtomicBoolean passed = new AtomicBoolean(false);

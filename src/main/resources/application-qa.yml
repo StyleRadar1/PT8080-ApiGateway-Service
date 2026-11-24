@@ -12,6 +12,7 @@ spring:
   cloud:
     gateway:
       globalcors:
+        add-to-simple-url-handler-mapping: true
         cors-configurations:
           '[/**]':
             allowedOrigins:
@@ -131,7 +132,7 @@ spring:
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:https://styleradar-qa-app.azurewebsites.net}
           predicates:
-            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/admin/usuarios, /api/v1/admin/usuarios/**
+            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/admin/usuarios, /api/v1/admin/usuarios/**, /api/v1/users, /api/v1/users/**, /api/v1/admin/users, /api/v1/admin/users/**
 
         # Paquete 2: Catálogo (RESTrepo · Azure Container Apps)
         - id: ms-inventario
@@ -172,7 +173,7 @@ spring:
           order: -1
           uri: ${PAGOS_SERVICE_URL:https://ca-styleradar-pagos-juangv1.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/plans, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/webhooks/mercadopago
+            - Path=/api/v1/plans, /api/v1/plans/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/webhooks/mercadopago
 
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:https://sr-ms-estadisticas-qa.azurewebsites.net}
