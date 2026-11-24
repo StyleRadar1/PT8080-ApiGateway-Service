@@ -159,16 +159,17 @@ class GatewayRoutingAndSecurityIntegrationTest {
             }
         });
 
-        // 1d. Endpoint mock que simula microservicio emitiendo cabeceras CORS duplicadas o en conflicto
+        // 1d. Endpoint mock que simula microservicio emitiendo cabeceras CORS no autorizadas y Vary propio
         mockHttpServer.createContext("/api/v1/donations/cors-dup", exchange -> {
             try {
                 exchange.getRequestBody().readAllBytes();
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
                 exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
-                exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "Location, Content-Disposition");
+                exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "Location, X-Internal-Debug");
                 exchange.getResponseHeaders().add("Vary", "Origin");
                 exchange.getResponseHeaders().add("Vary", "Access-Control-Request-Method");
+                exchange.getResponseHeaders().add("Vary", "Accept-Encoding");
                 byte[] bytes = "{\"service\":\"ms-segunda-vida-donaciones\",\"status\":\"OK\"}"
                         .getBytes(StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, bytes.length);
@@ -965,7 +966,7 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración CORS Perimetral: deduplica cabeceras CORS emitidas por downstream conservando origen del Gateway")
+    @DisplayName("Integración CORS Perimetral: restringe Expose-Headers a los autorizados por el Gateway y preserva Vary del microservicio")
     void shouldDeduplicateDownstreamCorsResponseHeadersKeepingGatewayOrigin() {
         String token = generateValidToken("user-cors-don", "ROLE_BUYER");
 
@@ -998,6 +999,10 @@ class GatewayRoutingAndSecurityIntegrationTest {
         org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("WWW-Authenticate"));
         org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("Location"));
         org.junit.jupiter.api.Assertions.assertTrue(exposeValue.contains("Content-Disposition"));
+        org.junit.jupiter.api.Assertions.assertFalse(
+                exposeValue.contains("X-Internal-Debug"),
+                "No debe exponer cabeceras adicionales emitidas únicamente por el microservicio downstream"
+        );
         org.junit.jupiter.api.Assertions.assertEquals(
                 exposeValue.indexOf("Location"),
                 exposeValue.lastIndexOf("Location"),
@@ -1016,5 +1021,10 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 );
             }
         }
+        org.junit.jupiter.api.Assertions.assertTrue(
+                uniqueVary.contains("accept-encoding"),
+                "Vary debe conservar los valores aportados por el microservicio downstream"
+        );
+        org.junit.jupiter.api.Assertions.assertTrue(uniqueVary.contains("origin"));
     }
 }

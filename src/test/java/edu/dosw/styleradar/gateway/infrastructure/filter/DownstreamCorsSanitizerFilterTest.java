@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DownstreamCorsSanitizerFilterTest {
 
@@ -66,29 +67,30 @@ class DownstreamCorsSanitizerFilterTest {
     }
 
     @Test
-    @DisplayName("En beforeCommit deduplica cabeceras CORS conservando el origen del Gateway y unificando Expose-Headers/Vary")
-    void shouldDeduplicateCorsResponseHeadersBeforeCommitRetainingGatewayOriginAndMergingExposeHeaders() {
+    @DisplayName("Conserva únicamente las cabeceras CORS autorizadas por el Gateway y preserva Vary del microservicio sin duplicados")
+    void shouldKeepOnlyGatewayAuthorizedCorsHeadersAndPreserveDownstreamVaryValues() {
         MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/donations/publications")
                 .header(HttpHeaders.ORIGIN, "https://styleradar-qa.vercel.app")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
+        HttpHeaders gatewayHeaders = exchange.getResponse().getHeaders();
+        gatewayHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://styleradar-qa.vercel.app");
+        gatewayHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+        gatewayHeaders.set(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                "Retry-After, Authorization, WWW-Authenticate, Location, Content-Disposition");
+        gatewayHeaders.addAll(HttpHeaders.VARY, List.of(
+                "Origin",
+                "Access-Control-Request-Method",
+                "Access-Control-Request-Headers"
+        ));
+
         GatewayFilterChain chain = ex -> {
             HttpHeaders resHeaders = ex.getResponse().getHeaders();
-            resHeaders.add(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://styleradar-qa.vercel.app");
             resHeaders.add(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
             resHeaders.add(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
-            resHeaders.add(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
-            resHeaders.add(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
-                    "Retry-After, Authorization, WWW-Authenticate, Location");
-            resHeaders.add(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, "Location, Content-Disposition");
-            resHeaders.addAll(HttpHeaders.VARY, List.of(
-                    "Origin",
-                    "Access-Control-Request-Method",
-                    "Access-Control-Request-Headers",
-                    "Origin",
-                    "Access-Control-Request-Method"
-            ));
+            resHeaders.add(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, "Location, X-Internal-Debug");
+            resHeaders.addAll(HttpHeaders.VARY, List.of("Origin", "Access-Control-Request-Method", "Accept-Encoding"));
             return ex.getResponse().setComplete();
         };
 
@@ -104,33 +106,58 @@ class DownstreamCorsSanitizerFilterTest {
                 responseHeaders.get(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS)
         );
         assertEquals(
-                List.of("Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"),
+                List.of("Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers", "Accept-Encoding"),
                 responseHeaders.get(HttpHeaders.VARY)
         );
     }
 
     @Test
+    @DisplayName("Si el Gateway no autorizó cabeceras CORS previas, elimina las emitidas por downstream y conserva Vary")
+    void shouldRemoveUnauthorizedDownstreamCorsHeadersWhenGatewayDidNotAuthorizeAny() {
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/donations/publications")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        GatewayFilterChain chain = ex -> {
+            HttpHeaders resHeaders = ex.getResponse().getHeaders();
+            resHeaders.add(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+            resHeaders.add(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, "X-Secret-Header");
+            resHeaders.add(HttpHeaders.VARY, "Accept-Encoding");
+            return ex.getResponse().setComplete();
+        };
+
+        StepVerifier.create(filter.filter(exchange, chain)).verifyComplete();
+
+        HttpHeaders responseHeaders = exchange.getResponse().getHeaders();
+        assertFalse(responseHeaders.containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
+        assertFalse(responseHeaders.containsKey(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS));
+        assertFalse(responseHeaders.containsKey(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS));
+        assertEquals(List.of("Accept-Encoding"), responseHeaders.get(HttpHeaders.VARY));
+    }
+
+    @Test
     @DisplayName("Maneja de forma segura HttpHeaders nulos, vacíos, de un solo valor o con entradas en blanco")
-    void shouldHandleNullOrSingleValueHeadersGracefully() {
-        assertDoesNotThrow(() -> DownstreamCorsSanitizerFilter.sanitizeCorsResponseHeaders(null));
+    void shouldHandleNullAndEmptyHeadersGracefully() {
+        assertTrue(DownstreamCorsSanitizerFilter.captureHeaderValues(null, HttpHeaders.ORIGIN).isEmpty());
+        HttpHeaders blankHeaders = new HttpHeaders();
+        blankHeaders.put(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, Arrays.asList("   ", null, ""));
+        assertTrue(DownstreamCorsSanitizerFilter.captureHeaderValues(
+                blankHeaders, HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN).isEmpty());
 
-        HttpHeaders singleHeaders = new HttpHeaders();
-        singleHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173");
-        singleHeaders.set(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
-        singleHeaders.set(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, "Location");
-        singleHeaders.set(HttpHeaders.VARY, "Origin");
-        assertDoesNotThrow(() -> DownstreamCorsSanitizerFilter.sanitizeCorsResponseHeaders(singleHeaders));
-        assertEquals(List.of("http://localhost:5173"),
-                singleHeaders.get(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
-        assertEquals(List.of("Location"), singleHeaders.get(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS));
-        assertEquals(List.of("Origin"), singleHeaders.get(HttpHeaders.VARY));
+        assertDoesNotThrow(() -> DownstreamCorsSanitizerFilter.sanitizeCorsResponseHeaders(
+                null, List.of(), List.of(), List.of()));
 
-        HttpHeaders emptyAndBlankDuplicates = new HttpHeaders();
-        emptyAndBlankDuplicates.put(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, Arrays.asList("   ", null, ""));
-        emptyAndBlankDuplicates.put(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, Arrays.asList("  ", " , ", null));
-        emptyAndBlankDuplicates.put(HttpHeaders.VARY, Arrays.asList(" ", null, "  "));
-        assertDoesNotThrow(() -> DownstreamCorsSanitizerFilter.sanitizeCorsResponseHeaders(emptyAndBlankDuplicates));
-        assertEquals(3, emptyAndBlankDuplicates.get(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN).size());
+        HttpHeaders singleVary = new HttpHeaders();
+        singleVary.set(HttpHeaders.VARY, "Origin");
+        assertDoesNotThrow(() -> DownstreamCorsSanitizerFilter.sanitizeCorsResponseHeaders(
+                singleVary, null, List.of(), List.of()));
+        assertEquals(List.of("Origin"), singleVary.get(HttpHeaders.VARY));
+
+        HttpHeaders blankVaryDuplicates = new HttpHeaders();
+        blankVaryDuplicates.put(HttpHeaders.VARY, Arrays.asList(" ", null, "  ", " , "));
+        assertDoesNotThrow(() -> DownstreamCorsSanitizerFilter.sanitizeCorsResponseHeaders(
+                blankVaryDuplicates, List.of(), List.of(), List.of()));
+        assertEquals(4, blankVaryDuplicates.get(HttpHeaders.VARY).size());
     }
 
     @Test

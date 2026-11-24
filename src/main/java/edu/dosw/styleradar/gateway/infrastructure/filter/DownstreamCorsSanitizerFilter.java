@@ -23,8 +23,12 @@ import java.util.Map;
  * <ul>
  *     <li>Remueve la cabecera {@code Origin} de la petición reenviada para evitar que los
  *     microservicios downstream rechacen orígenes legítimos con {@code 403 Invalid CORS request}.</li>
- *     <li>Deduplica y sanea las cabeceras CORS en la respuesta antes de enviarlas al navegador,
- *     preservando el valor autoritativo emitido por el API Gateway.</li>
+ *     <li>Conserva estrictamente los valores de {@code Access-Control-Allow-Origin},
+ *     {@code Access-Control-Allow-Credentials} y {@code Access-Control-Expose-Headers}
+ *     autorizados por el API Gateway para la petición, descartando cualquier cabecera CORS
+ *     adicional o conflictiva emitida por el microservicio downstream.</li>
+ *     <li>Preserva y deduplica los valores de {@code Vary} aportados por el microservicio
+ *     downstream (p. ej. {@code Accept-Encoding}) junto con los de CORS.</li>
  * </ul>
  */
 @Component
@@ -41,43 +45,61 @@ public class DownstreamCorsSanitizerFilter implements GlobalFilter, Ordered {
         }
 
         final ServerWebExchange finalExchange = targetExchange;
+        HttpHeaders initialResponseHeaders = finalExchange.getResponse().getHeaders();
+        final List<String> gatewayAllowOrigin =
+                captureHeaderValues(initialResponseHeaders, HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
+        final List<String> gatewayAllowCredentials =
+                captureHeaderValues(initialResponseHeaders, HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS);
+        final List<String> gatewayExposeHeaders =
+                captureHeaderValues(initialResponseHeaders, HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS);
+
         finalExchange.getResponse().beforeCommit(() -> {
-            sanitizeCorsResponseHeaders(finalExchange.getResponse().getHeaders());
+            sanitizeCorsResponseHeaders(
+                    finalExchange.getResponse().getHeaders(),
+                    gatewayAllowOrigin,
+                    gatewayAllowCredentials,
+                    gatewayExposeHeaders
+            );
             return Mono.empty();
         });
         return chain.filter(finalExchange);
     }
 
-    static void sanitizeCorsResponseHeaders(HttpHeaders headers) {
+    static List<String> captureHeaderValues(HttpHeaders headers, String headerName) {
+        if (headers == null) {
+            return List.of();
+        }
+        List<String> values = headers.get(headerName);
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        List<String> captured = values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .toList();
+        return captured.isEmpty() ? List.of() : captured;
+    }
+
+    static void sanitizeCorsResponseHeaders(
+            HttpHeaders headers,
+            List<String> gatewayAllowOrigin,
+            List<String> gatewayAllowCredentials,
+            List<String> gatewayExposeHeaders
+    ) {
         if (headers == null) {
             return;
         }
-        retainFirstValue(headers, HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
-        retainFirstValue(headers, HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS);
-        dedupeCommaSeparatedHeader(headers, HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS);
+        enforceGatewayHeader(headers, HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, gatewayAllowOrigin);
+        enforceGatewayHeader(headers, HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, gatewayAllowCredentials);
+        enforceGatewayHeader(headers, HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, gatewayExposeHeaders);
         dedupeListHeader(headers, HttpHeaders.VARY);
     }
 
-    private static void retainFirstValue(HttpHeaders headers, String headerName) {
-        List<String> values = headers.get(headerName);
-        if (values == null || values.size() <= 1) {
+    private static void enforceGatewayHeader(HttpHeaders headers, String headerName, List<String> gatewayValues) {
+        if (gatewayValues == null || gatewayValues.isEmpty()) {
+            headers.remove(headerName);
             return;
         }
-        values.stream()
-                .filter(value -> value != null && !value.isBlank())
-                .findFirst()
-                .ifPresent(first -> headers.set(headerName, first));
-    }
-
-    private static void dedupeCommaSeparatedHeader(HttpHeaders headers, String headerName) {
-        List<String> values = headers.get(headerName);
-        if (values == null || values.size() <= 1) {
-            return;
-        }
-        Map<String, String> unique = collectUniqueTokens(values);
-        if (!unique.isEmpty()) {
-            headers.set(headerName, String.join(", ", unique.values()));
-        }
+        headers.put(headerName, new ArrayList<>(gatewayValues));
     }
 
     private static void dedupeListHeader(HttpHeaders headers, String headerName) {
