@@ -424,6 +424,36 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
+    @DisplayName("CORS Preflight en rutas Method=GET: autoriza Vercel/Vite en almacenes/catalogo/distancia/fundaciones y rechaza ajenos")
+    void shouldAllowCorsPreflightOnMethodGetAlmacenesRoutesAndRejectForeignOrigin() {
+        for (String authorizedOrigin : List.of("https://styleradar-qa.vercel.app", "http://localhost:5173")) {
+            for (String path : List.of(
+                    "/api/v1/almacenes",
+                    "/api/v1/almacenes/123/catalogo",
+                    "/api/v1/almacenes/123/distancia",
+                    "/api/v1/fundaciones/cercanas"
+            )) {
+                webTestClient.options().uri(path)
+                        .header(HttpHeaders.ORIGIN, authorizedOrigin)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type,authorization")
+                        .exchange()
+                        .expectStatus().isOk()
+                        .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, authorizedOrigin)
+                        .expectHeader().valueEquals(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true");
+            }
+        }
+
+        webTestClient.options().uri("/api/v1/almacenes")
+                .header(HttpHeaders.ORIGIN, "https://app-ajena.vercel.app")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type,authorization")
+                .exchange()
+                .expectStatus().isForbidden()
+                .expectHeader().doesNotExist(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN);
+    }
+
+    @Test
     @DisplayName("Swagger Aggregator: /v3/api-docs/usuarios expone '/' como primer server y POST /api/v1/usuarios pasa sin JWT")
     void shouldRewriteUsuariosOpenApiServersToGatewayAndAllowPublicPostRegistration() {
         webTestClient.get().uri("/v3/api-docs/usuarios")
