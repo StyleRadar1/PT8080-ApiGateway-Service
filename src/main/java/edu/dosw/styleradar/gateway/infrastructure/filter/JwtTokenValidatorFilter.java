@@ -87,6 +87,18 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/stores/*/photos/*",
             "/api/v1/foundations",
             "/api/v1/foundations/",
+            "/api/v1/garments",
+            "/api/v1/garments/",
+            "/api/v1/garments/*",
+            "/api/v1/garments/*/similar",
+            "/api/v1/garments/*/availability",
+            "/api/v1/garments/*/size-guide",
+            "/api/v1/stores/*/catalog",
+            "/api/v1/stores/*/catalog/summary",
+            "/api/v1/stores/*/new-arrivals",
+            "/api/v1/stores/nearby",
+            "/api/v1/stores/*/distance",
+            "/api/v1/foundations/nearby",
             "/api/v1/prendas",
             "/api/v1/prendas/",
             "/api/v1/prendas/*",
@@ -372,6 +384,8 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
                 || pathMatcher.match("/api/v1/second-hand/publications/user/**", path)
                 || pathMatcher.match("/api/v1/second-hand/user/**", path)
                 || pathMatcher.match("/api/v1/donations/**", path)
+                || pathMatcher.match("/api/v1/garments/pending", path)
+                || pathMatcher.match("/api/v1/garments/pending/**", path)
                 || pathMatcher.match("/api/v1/prendas/pendientes", path)
                 || pathMatcher.match("/api/v1/prendas/pendientes/**", path)
                 || pathMatcher.match("/api/v1/playlists/me", path)
