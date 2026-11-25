@@ -166,6 +166,35 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
+    @DisplayName("Rutas en inglés: mapa, distancia y fundaciones van a Geolocalizacion y catálogo del almacén a Item-Catalogo sin token")
+    void shouldRouteEnglishGeolocationAndCatalogRoutes() {
+        assertRoutedTo("/api/v1/stores/nearby?lat=4.6&lng=-74.0", "ms-geolocalizacion");
+        assertRoutedTo("/api/v1/stores/42/distance?lat=4.6&lng=-74.0", "ms-geolocalizacion");
+        assertRoutedTo("/api/v1/foundations/nearby?lat=4.6&lng=-74.0", "ms-geolocalizacion");
+        assertRoutedTo("/api/v1/stores/42/catalog", "ms-item-catalogo");
+        assertRoutedTo("/api/v1/stores/42/catalog/summary", "ms-item-catalogo");
+        assertRoutedTo("/api/v1/stores/42/new-arrivals", "ms-item-catalogo");
+        assertRoutedTo("/api/v1/garments", "ms-item-catalogo");
+        assertRoutedTo("/api/v1/garments/42", "ms-item-catalogo");
+        assertRoutedTo("/api/v1/garments/42/similar", "ms-item-catalogo");
+        assertRoutedTo("/api/v1/garments/42/size-guide", "ms-item-catalogo");
+    }
+
+    @Test
+    @DisplayName("Rutas en inglés: publicar y moderar prendas siguen exigiendo token")
+    void shouldProtectEnglishGarmentWritesAndPending() {
+        webTestClient.post().uri("/api/v1/garments").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/api/v1/garments/pending").exchange().expectStatus().isUnauthorized();
+        String adminToken = token("7", List.of("STYLERADAR_ADMIN"), null);
+        webTestClient.get().uri("/api/v1/garments/pending")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-item-catalogo");
+        webTestClient.get().uri("/api/v1/stores/900555777-1/catalog-settings")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-tiendas");
+    }
+
+    @Test
     @DisplayName("Tiendas: rutas reales (/stores) llegan a Tiendas y rutas obsoletas (/almacenes/{id}) no caen alli")
     void shouldKeepOtherAlmacenesRoutesInTiendas() {
         String token = token("7", List.of("ADMIN_STYLERADAR"), null);

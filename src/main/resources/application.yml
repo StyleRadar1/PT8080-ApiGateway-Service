@@ -127,14 +127,14 @@ spring:
           uri: ${GEOLOCALIZACION_SERVICE_URL:http://localhost:8240}
           predicates:
             - Method=GET
-            - Path=/api/v1/almacenes, /api/v1/almacenes/{id}/distancia, /api/v1/fundaciones/cercanas
+            - Path=/api/v1/stores/nearby, /api/v1/stores/{id}/distance, /api/v1/foundations/nearby, /api/v1/almacenes, /api/v1/almacenes/{id}/distancia, /api/v1/fundaciones/cercanas
 
         - id: ms-item-catalogo-almacenes
           order: -2
           uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
           predicates:
             - Method=GET
-            - Path=/api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
+            - Path=/api/v1/stores/{id}/catalog, /api/v1/stores/{id}/catalog/summary, /api/v1/stores/{id}/new-arrivals, /api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
         # ms-chat-conversations: rutas de conversaciones bajo users/stores/donations/publications (prioridad -2)
         - id: ms-chat-conversations
           order: -2
@@ -166,7 +166,7 @@ spring:
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
           predicates:
-            - Path=/api/v1/prendas, /api/v1/prendas/**, /api/v1/catalogo/items/**
+            - Path=/api/v1/garments, /api/v1/garments/**, /api/v1/prendas, /api/v1/prendas/**, /api/v1/catalogo/items/**
 
         # ms-playlist: Listas de Prendas y Outfits (Puerto 8260)
         - id: ms-playlist
