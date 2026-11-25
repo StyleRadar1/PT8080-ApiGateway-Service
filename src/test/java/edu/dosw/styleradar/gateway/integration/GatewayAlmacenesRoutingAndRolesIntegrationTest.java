@@ -504,10 +504,10 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
             webTestClient.get().uri(statsPath).exchange().expectStatus().isUnauthorized();
         }
 
-        String storeAdminToken = token("42", List.of("STORE_ADMIN"), "store-real-900");
+        String platformAdminToken = token("1", List.of("ADMIN_STYLERADAR"), null);
         webTestClient.get()
                 .uri("/api/v1/statistics/time-series/PLATFORM_USER_REGISTRATIONS?startDate=2026-01-01&endDate=2026-11-01&granularity=MONTHLY")
-                .header(HttpHeaders.AUTHORIZATION, "Bearer " + storeAdminToken)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + platformAdminToken)
                 .header("X-Store-Id", "spoofed-store")
                 .header("X-Foundation-Id", "spoofed-foundation")
                 .exchange()
@@ -515,6 +515,20 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-estadisticas")
                 .jsonPath("$.query").isEqualTo("startDate=2026-01-01&endDate=2026-11-01&granularity=MONTHLY")
+                .jsonPath("$.authorization").isEqualTo("Bearer " + platformAdminToken)
+                .jsonPath("$.storeId").isEqualTo("none")
+                .jsonPath("$.foundationId").isEqualTo("none");
+
+        String storeAdminToken = token("42", List.of("STORE_ADMIN"), "store-real-900");
+        webTestClient.get()
+                .uri("/api/v1/statistics/distributions/STORE_INVENTORY_BY_STATE")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + storeAdminToken)
+                .header("X-Store-Id", "spoofed-store")
+                .header("X-Foundation-Id", "spoofed-foundation")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-estadisticas")
                 .jsonPath("$.authorization").isEqualTo("Bearer " + storeAdminToken)
                 .jsonPath("$.storeId").isEqualTo("none")
                 .jsonPath("$.foundationId").isEqualTo("none");
@@ -793,16 +807,19 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         String buyerToken = token("7", List.of("BUYER"), null);
         String adminToken = token("1", List.of("STYLERADAR_ADMIN"), null);
 
-        // ms-auth: POST /api/v1/auth/login es público y recibe X-Forwarded-For
+        // ms-auth: POST /api/v1/auth/login es público y en modo fail-closed descarta X-Forwarded-For spoofed del cliente
         webTestClient.post().uri("/api/v1/auth/login")
                 .header("X-Forwarded-For", "203.0.113.45")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-auth")
-                .jsonPath("$.forwardedFor").value(org.hamcrest.Matchers.containsString("203.0.113.45"));
+                .jsonPath("$.forwardedFor").value(org.hamcrest.Matchers.anyOf(
+                        org.hamcrest.Matchers.is("127.0.0.1"),
+                        org.hamcrest.Matchers.is("0:0:0:0:0:0:0:1")
+                ));
 
-        // ms-auth: POST /api/v1/auth/logout exige Bearer JWT y reenvía Authorization + X-Forwarded-For
+        // ms-auth: POST /api/v1/auth/logout exige Bearer JWT, reenvía Authorization e impide spoofing de IP
         webTestClient.post().uri("/api/v1/auth/logout")
                 .exchange()
                 .expectStatus().isUnauthorized();
@@ -815,7 +832,10 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-auth")
                 .jsonPath("$.authorization").value(org.hamcrest.Matchers.startsWith("Bearer "))
-                .jsonPath("$.forwardedFor").value(org.hamcrest.Matchers.containsString("203.0.113.45"));
+                .jsonPath("$.forwardedFor").value(org.hamcrest.Matchers.anyOf(
+                        org.hamcrest.Matchers.is("127.0.0.1"),
+                        org.hamcrest.Matchers.is("0:0:0:0:0:0:0:1")
+                ));
 
         // ms-tiendas: nuevas rutas DELETE admin exigen JWT y reenvían Authorization
         for (String deleteUri : List.of(

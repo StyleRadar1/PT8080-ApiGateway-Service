@@ -10,10 +10,13 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   cloud:
     gateway:
+      forwarded:
+        enabled: false
       x-forwarded:
         enabled: true
-        for-enabled: true
-        for-append: true
+        for-enabled: false
+        proto-append: false
+        host-append: false
       discovery:
         locator:
           enabled: false
@@ -295,8 +298,9 @@ security:
   jwt:
     secret-base64: ${JWT_SECRET_BASE64:${JWT_SECRET:}}
 
-# Resiliencia del CircuitBreaker para rutas con procesamiento pesado o cold-start en Azure (Try-On, Donaciones)
+# Resiliencia del CircuitBreaker y proxies confiables para X-Forwarded-For
 styleradar:
   gateway:
+    trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:}
     circuit-breaker:
       timeout-seconds: ${GATEWAY_CIRCUIT_BREAKER_TIMEOUT_SECONDS:30}
