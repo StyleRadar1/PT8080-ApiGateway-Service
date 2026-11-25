@@ -44,7 +44,7 @@ spring:
         - id: ms-probador-virtual-swagger
           uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:https://styleradar-virtualtryon-prod.azurewebsites.net}}
           predicates:
-            - Path=/v3/api-docs/probador
+            - Path=/v3/api-docs/probador, /v3/api-docs/try-on
           filters:
             - SetPath=/v3/api-docs
 
@@ -93,7 +93,7 @@ spring:
         - id: ms-pagos-swagger
           uri: ${PAGOS_SERVICE_URL:https://ca-styleradar-pagos-prod.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/v3/api-docs/pagos
+            - Path=/v3/api-docs/pagos, /v3/api-docs/payments
           filters:
             - SetPath=/v3/api-docs
 
@@ -104,11 +104,44 @@ spring:
           filters:
             - SetPath=/api/v1/v3/api-docs
 
+        - id: ms-inventario-swagger
+          uri: ${INVENTARIO_SERVICE_URL:https://rst-inventory-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
+          predicates:
+            - Path=/v3/api-docs/inventario, /v3/api-docs/inventory
+          filters:
+            - SetPath=/v3/api-docs
+
+        - id: ms-catalogo-swagger
+          uri: ${CATALOGO_SERVICE_URL:https://rst-itemcatalog-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
+          predicates:
+            - Path=/v3/api-docs/catalogo, /v3/api-docs/catalog
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
+        - id: ms-geolocalizacion-swagger
+          uri: ${GEOLOCALIZACION_SERVICE_URL:https://rst-geolocation-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
+          predicates:
+            - Path=/v3/api-docs/geolocalizacion, /v3/api-docs/geolocation
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
+        - id: ms-playlist-swagger
+          uri: ${PLAYLIST_SERVICE_URL:https://rst-playlist-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
+          predicates:
+            - Path=/v3/api-docs/playlist, /v3/api-docs/playlists
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
         # Paquete 1: Identidad
         - id: ms-auth
           uri: ${AUTH_SERVICE_URL:https://styleradar-auth-prod.azurewebsites.net}
           predicates:
             - Path=/api/v1/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         # Rutas especificas de almacenes con prioridad sobre la ruta general de Tiendas
         - id: ms-geolocalizacion-almacenes
@@ -117,6 +150,11 @@ spring:
           predicates:
             - Method=GET
             - Path=/api/v1/stores/nearby, /api/v1/stores/{id}/distance, /api/v1/foundations/nearby, /api/v1/almacenes, /api/v1/almacenes/{id}/distancia, /api/v1/fundaciones/cercanas
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         - id: ms-item-catalogo-almacenes
           order: -2
@@ -124,39 +162,74 @@ spring:
           predicates:
             - Method=GET
             - Path=/api/v1/stores/{id}/catalog, /api/v1/stores/{id}/catalog/summary, /api/v1/stores/{id}/new-arrivals, /api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
         - id: ms-chat-conversations
           order: -2
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
             - Path=/api/v1/users/conversations, /api/v1/users/{userId}/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         - id: ms-tiendas
           order: -1
           uri: ${TIENDAS_SERVICE_URL:https://styleradar-tiendas-prod.azurewebsites.net}
           predicates:
             - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
           predicates:
             - Path=/api/v1/users, /api/v1/users/**, /api/v1/admin/users, /api/v1/admin/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         # Paquete 2: Catálogo (RESTrepo · Azure Container Apps)
         - id: ms-inventario
           uri: ${INVENTARIO_SERVICE_URL:https://rst-inventory-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
           predicates:
             - Path=/api/v1/inventory, /api/v1/inventory/**, /api/v1/inventario, /api/v1/inventario/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:https://rst-itemcatalog-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
           predicates:
             - Path=/api/v1/garments, /api/v1/garments/**, /api/v1/prendas, /api/v1/prendas/**, /api/v1/catalogo/items/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         # ms-playlist
         - id: ms-playlist
           uri: ${PLAYLIST_SERVICE_URL:https://rst-playlist-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
           predicates:
             - Path=/api/v1/playlists, /api/v1/playlists/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         # Paquete 3: Mensajería
         - id: ms-notificaciones
@@ -164,11 +237,21 @@ spring:
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-prod.azurewebsites.net}
           predicates:
             - Path=/api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
             - Path=/api/v1/conversations, /api/v1/conversations/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         - id: ms-chat-ws
           uri: ${CHAT_WS_SERVICE_URL:wss://gj-chat-service-prod-santi.azurewebsites.net}
@@ -181,11 +264,21 @@ spring:
           uri: ${PAGOS_SERVICE_URL:https://ca-styleradar-pagos-prod.lemonplant-91cfa5ac.northcentralus.azurecontainerapps.io}
           predicates:
             - Path=/api/v1/plans, /api/v1/plans/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/webhooks/mercadopago
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:https://sr-ms-estadisticas-prod.azurewebsites.net}
           predicates:
-            - Path=/api/v1/statistics/**
+            - Path=/api/v1/statistics, /api/v1/statistics/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: generalCircuitBreaker
+                fallbackUri: forward:/fallback/general
 
         # Paquete 5: Experiencia y Donaciones
         - id: ms-probador-virtual

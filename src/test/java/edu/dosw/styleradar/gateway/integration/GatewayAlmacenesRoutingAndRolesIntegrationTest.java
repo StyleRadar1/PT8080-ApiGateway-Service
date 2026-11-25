@@ -111,6 +111,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                             + "\"authorization\":\"" + h(exchange, "Authorization") + "\"}";
                     byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
                     exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.getResponseHeaders().set("Connection", "close");
                     exchange.sendResponseHeaders(200, bytes.length);
                     try (OutputStream os = exchange.getResponseBody()) {
                         os.write(bytes);
@@ -561,8 +562,16 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-estadisticas")
                 .jsonPath("$.authorization").isEqualTo("Bearer " + storeAdminToken)
-                .jsonPath("$.storeId").isEqualTo("none")
+                .jsonPath("$.almacen").isEqualTo("store-real-900")
+                .jsonPath("$.storeId").isEqualTo("store-real-900")
                 .jsonPath("$.foundationId").isEqualTo("none");
+
+        webTestClient.get().uri("/api/v1/statistics")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + platformAdminToken)
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-estadisticas");
 
         for (String docsUri : List.of("/v3/api-docs/statistics", "/v3/api-docs/estadisticas")) {
             webTestClient.get().uri(docsUri).exchange()
@@ -571,6 +580,40 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                     .jsonPath("$.service").isEqualTo("ms-estadisticas")
                     .jsonPath("$.path").isEqualTo("/api/v1/v3/api-docs");
         }
+
+        for (String docsUri : List.of("/v3/api-docs/inventario", "/v3/api-docs/inventory")) {
+            webTestClient.get().uri(docsUri).exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.service").isEqualTo("ms-inventario")
+                    .jsonPath("$.path").isEqualTo("/v3/api-docs");
+        }
+        for (String docsUri : List.of("/v3/api-docs/catalogo", "/v3/api-docs/catalog")) {
+            webTestClient.get().uri(docsUri).exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.service").isEqualTo("ms-item-catalogo")
+                    .jsonPath("$.path").isEqualTo("/api/v1/v3/api-docs");
+        }
+        for (String docsUri : List.of("/v3/api-docs/geolocalizacion", "/v3/api-docs/geolocation")) {
+            webTestClient.get().uri(docsUri).exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.service").isEqualTo("ms-geolocalizacion")
+                    .jsonPath("$.path").isEqualTo("/api/v1/v3/api-docs");
+        }
+        for (String docsUri : List.of("/v3/api-docs/playlist", "/v3/api-docs/playlists")) {
+            webTestClient.get().uri(docsUri).exchange()
+                    .expectStatus().isOk()
+                    .expectBody()
+                    .jsonPath("$.service").isEqualTo("ms-playlist")
+                    .jsonPath("$.path").isEqualTo("/api/v1/v3/api-docs");
+        }
+        webTestClient.get().uri("/v3/api-docs/payments").exchange()
+                .expectStatus().isOk()
+                .expectBody()
+                .jsonPath("$.service").isEqualTo("ms-pagos")
+                .jsonPath("$.path").isEqualTo("/v3/api-docs");
     }
 
     @Test

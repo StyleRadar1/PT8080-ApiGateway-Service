@@ -976,4 +976,71 @@ class JwtTokenValidatorFilterTest {
             assertEquals(HttpStatus.UNAUTHORIZED, ex.getResponse().getStatusCode());
         }
     }
+
+    @Test
+    @DisplayName("BUG-008: JWT malformado retorna 401 estático sin detalles internos de Jackson/JJWT y propaga correlación")
+    void filter_tokenMalformado_retorna401SinDetallesInternosYConCorrelacion() {
+        String malformedHeader = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString("{\"alg\":\"HS256\"broken".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String malformedJwt = malformedHeader + ".e30.sig";
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/statistics")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + malformedJwt)
+                .header(GlobalRequestLoggingFilter.CORRELATION_ID_HEADER, "corr-jwt-401")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        StepVerifier.create(filter.filter(exchange, ex -> Mono.empty())).verifyComplete();
+
+        assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+        assertEquals("corr-jwt-401", exchange.getResponse().getHeaders().getFirst(GlobalRequestLoggingFilter.CORRELATION_ID_HEADER));
+        assertEquals("corr-jwt-401", exchange.getResponse().getHeaders().getFirst(GlobalRequestLoggingFilter.REQUEST_ID_HEADER));
+        String responseBody = exchange.getResponse().getBodyAsString().block();
+        assertNotNull(responseBody);
+        assertTrue(responseBody.contains("\"message\":\"Token JWT inválido o expirado\""),
+                "Debe retornar mensaje estático sin filtrar excepciones internas: " + responseBody);
+        assertTrue(responseBody.contains("\"correlationId\":\"corr-jwt-401\""));
+        assertFalse(responseBody.contains("Jackson"));
+        assertFalse(responseBody.contains("JsonParseException"));
+        assertFalse(responseBody.contains("DeserializationException"));
+    }
+
+    @Test
+    @DisplayName("BUG-005: Sanea e inyecta X-Store-Id, X-Almacen-Id y X-Foundation-Id exclusivamente desde claims firmados")
+    void filter_conClaimsStoreYFoundation_inyectaHeadersYPrevieneSpoofing() {
+        String token = Jwts.builder()
+                .subject("user-multi-scope")
+                .claim("role", "ROLE_STORE_ADMIN")
+                .claim("storeId", "store-signed-77")
+                .claim("foundationId", "found-signed-88")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/statistics/distributions/STORE_INVENTORY_BY_STATE")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(JwtTokenValidatorFilter.STORE_ID_HEADER, "spoofed-store")
+                .header(JwtTokenValidatorFilter.ALMACEN_ID_HEADER, "spoofed-almacen")
+                .header(JwtTokenValidatorFilter.FOUNDATION_ID_HEADER, "spoofed-foundation")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean passed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(exchange, ex -> {
+            passed.set(true);
+            assertEquals("store-signed-77", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.STORE_ID_HEADER));
+            assertEquals("store-signed-77", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.ALMACEN_ID_HEADER));
+            assertEquals("found-signed-88", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.FOUNDATION_ID_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+
+        assertTrue(passed.get());
+        assertNull(JwtTokenValidatorFilter.extractStoreId(null));
+        assertNull(JwtTokenValidatorFilter.extractFoundationId(null));
+        assertEquals("found-99", JwtTokenValidatorFilter.extractFoundationId(
+                Jwts.claims().add("fundacion_id", "found-99").build()));
+        assertNull(JwtTokenValidatorFilter.extractFoundationId(
+                Jwts.claims().add("foundationId", "invalid/chars!").build()));
+    }
 }

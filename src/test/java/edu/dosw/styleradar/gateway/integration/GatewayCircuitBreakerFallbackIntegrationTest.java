@@ -45,6 +45,7 @@ class GatewayCircuitBreakerFallbackIntegrationTest {
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry registry) {
         registry.add("TRYON_SERVICE_URL", () -> "http://127.0.0.1:" + UNUSED_PORT);
+        registry.add("ESTADISTICAS_SERVICE_URL", () -> "http://127.0.0.1:" + UNUSED_PORT);
     }
 
     @BeforeEach
@@ -92,5 +93,22 @@ class GatewayCircuitBreakerFallbackIntegrationTest {
                 .expectBody()
                 .jsonPath("$.status").isEqualTo(503)
                 .jsonPath("$.service").isEqualTo("ms-probador-virtual");
+    }
+
+    @Test
+    @DisplayName("Integración Fallback: GET /api/v1/statistics con backend caído activa generalCircuitBreaker y responde 503 con correlationId")
+    void shouldReturn503WhenGeneralRouteTriggersCircuitBreakerFallback() {
+        String token = generateBuyerToken("buyer-fallback-2");
+
+        webTestClient.get()
+                .uri("/api/v1/statistics")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header("X-Correlation-Id", "corr-cb-503")
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.SERVICE_UNAVAILABLE)
+                .expectBody()
+                .jsonPath("$.status").isEqualTo(503)
+                .jsonPath("$.error").isEqualTo("Microservicio No Disponible")
+                .jsonPath("$.correlationId").isEqualTo("corr-cb-503");
     }
 }
