@@ -65,21 +65,21 @@ spring:
         - id: ms-tiendas-swagger
           uri: ${TIENDAS_SERVICE_URL:https://styleradar-tiendas-prod.azurewebsites.net}
           predicates:
-            - Path=/v3/api-docs/tiendas
+            - Path=/v3/api-docs/stores, /v3/api-docs/tiendas
           filters:
             - SetPath=/v3/api-docs
 
         - id: ms-notificaciones-swagger
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-prod.azurewebsites.net}
           predicates:
-            - Path=/v3/api-docs/notificaciones
+            - Path=/v3/api-docs/notifications, /v3/api-docs/notificaciones
           filters:
             - SetPath=/v3/api-docs
 
         - id: ms-usuarios-swagger
           uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
           predicates:
-            - Path=/v3/api-docs/usuarios
+            - Path=/v3/api-docs/users, /v3/api-docs/usuarios
           filters:
             - SetPath=/v3/api-docs
 
@@ -96,6 +96,13 @@ spring:
             - Path=/v3/api-docs/pagos
           filters:
             - SetPath=/v3/api-docs
+
+        - id: ms-estadisticas-swagger
+          uri: ${ESTADISTICAS_SERVICE_URL:https://sr-ms-estadisticas-prod.azurewebsites.net}
+          predicates:
+            - Path=/v3/api-docs/statistics, /v3/api-docs/estadisticas
+          filters:
+            - SetPath=/api/v1/v3/api-docs
 
         # Paquete 1: Identidad
         - id: ms-auth
@@ -121,7 +128,7 @@ spring:
           order: -2
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
-            - Path=/api/v1/users/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
+            - Path=/api/v1/users/conversations, /api/v1/users/{userId}/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
 
         - id: ms-tiendas
           order: -1
@@ -132,7 +139,7 @@ spring:
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
           predicates:
-            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/admin/usuarios, /api/v1/admin/usuarios/**, /api/v1/users, /api/v1/users/**, /api/v1/admin/users, /api/v1/admin/users/**
+            - Path=/api/v1/users, /api/v1/users/**, /api/v1/admin/users, /api/v1/admin/users/**
 
         # Paquete 2: Catálogo (RESTrepo · Azure Container Apps)
         - id: ms-inventario
@@ -166,7 +173,7 @@ spring:
         - id: ms-chat-ws
           uri: ${CHAT_WS_SERVICE_URL:wss://gj-chat-service-prod-santi.azurewebsites.net}
           predicates:
-            - Path=/ws, /ws/**, /ws-chat, /ws-chat/**
+            - Path=/api/v1/ws, /api/v1/ws/**, /ws, /ws/**, /ws-chat, /ws-chat/**
 
         # Paquete 4: Pagos y Estadísticas
         - id: ms-pagos-suscripciones

@@ -10,6 +10,10 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   cloud:
     gateway:
+      x-forwarded:
+        enabled: true
+        for-enabled: true
+        for-append: true
       discovery:
         locator:
           enabled: false
@@ -70,27 +74,27 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
-        # Swagger Tiendas (transforma /v3/api-docs/tiendas -> /v3/api-docs en :8140)
+        # Swagger Tiendas (transforma /v3/api-docs/stores o /tiendas -> /v3/api-docs en :8140)
         - id: ms-tiendas-swagger
           uri: ${TIENDAS_SERVICE_URL:http://localhost:8140}
           predicates:
-            - Path=/v3/api-docs/tiendas
+            - Path=/v3/api-docs/stores, /v3/api-docs/tiendas
           filters:
             - SetPath=/v3/api-docs
 
-        # Swagger Notificaciones (transforma /v3/api-docs/notificaciones -> /v3/api-docs en :8300)
+        # Swagger Notificaciones (transforma /v3/api-docs/notifications o /notificaciones -> /v3/api-docs en :8300)
         - id: ms-notificaciones-swagger
           uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
           predicates:
-            - Path=/v3/api-docs/notificaciones
+            - Path=/v3/api-docs/notifications, /v3/api-docs/notificaciones
           filters:
             - SetPath=/v3/api-docs
 
-        # Swagger Usuarios (transforma /v3/api-docs/usuarios -> /v3/api-docs en :8120)
+        # Swagger Usuarios (transforma /v3/api-docs/users o /usuarios -> /v3/api-docs en :8120)
         - id: ms-usuarios-swagger
           uri: ${USUARIOS_SERVICE_URL:http://localhost:8120}
           predicates:
-            - Path=/v3/api-docs/usuarios
+            - Path=/v3/api-docs/users, /v3/api-docs/usuarios
           filters:
             - SetPath=/v3/api-docs
 
@@ -109,6 +113,14 @@ spring:
             - Path=/v3/api-docs/pagos
           filters:
             - SetPath=/v3/api-docs
+
+        # Swagger Estadísticas (transforma /v3/api-docs/statistics o /estadisticas -> /api/v1/v3/api-docs en :8420)
+        - id: ms-estadisticas-swagger
+          uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8420}
+          predicates:
+            - Path=/v3/api-docs/statistics, /v3/api-docs/estadisticas
+          filters:
+            - SetPath=/api/v1/v3/api-docs
 
         # ==============================================================
         # 2. Rutas de Microservicios de Negocio (Matriz Oficial de Puertos)
@@ -140,7 +152,7 @@ spring:
           order: -2
           uri: ${CHAT_SERVICE_URL:http://localhost:8320}
           predicates:
-            - Path=/api/v1/users/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
+            - Path=/api/v1/users/conversations, /api/v1/users/{userId}/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
 
         # ms-tiendas: Registro y Gestión de Almacenes Aliados y Fundaciones (Puerto 8140)
         - id: ms-tiendas
@@ -153,7 +165,7 @@ spring:
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:http://localhost:8120}
           predicates:
-            - Path=/api/v1/usuarios, /api/v1/usuarios/**, /api/v1/admin/usuarios, /api/v1/admin/usuarios/**, /api/v1/users, /api/v1/users/**, /api/v1/admin/users, /api/v1/admin/users/**
+            - Path=/api/v1/users, /api/v1/users/**, /api/v1/admin/users, /api/v1/admin/users/**
 
         # --- PAQUETE 2: CATÁLOGO (RESTrepo · Bloque 8200) ---
         # ms-inventario: Inventario por Talla (Puerto 8200)
@@ -192,7 +204,7 @@ spring:
         - id: ms-chat-ws
           uri: ${CHAT_WS_SERVICE_URL:${CHAT_SERVICE_WS_URL:ws://localhost:8320}}
           predicates:
-            - Path=/ws, /ws/**, /ws-chat, /ws-chat/**
+            - Path=/api/v1/ws, /api/v1/ws/**, /ws, /ws/**, /ws-chat, /ws-chat/**
 
         # --- PAQUETE 4: PAGOS Y ESTADÍSTICAS (NQS · Bloque 8400) ---
         # ms-pagos-suscripciones: Pasarela de Pagos y Suscripciones (Puerto 8400)
@@ -275,6 +287,8 @@ springdoc:
         url: "/v3/api-docs/chat"
       - name: "ms-pagos-suscripciones (:8400)"
         url: "/v3/api-docs/pagos"
+      - name: "ms-estadisticas (:8420)"
+        url: "/v3/api-docs/estadisticas"
 
 # Seguridad JWT Perimetral (inyección limpia por variable de entorno, sin clave quemada)
 security:

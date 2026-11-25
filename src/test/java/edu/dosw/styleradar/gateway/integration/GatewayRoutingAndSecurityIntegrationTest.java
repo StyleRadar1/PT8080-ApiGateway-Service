@@ -70,9 +70,14 @@ class GatewayRoutingAndSecurityIntegrationTest {
             mockWsServer = reactor.netty.http.server.HttpServer.create()
                     .host("127.0.0.1")
                     .port(0)
-                    .route(routes -> routes.ws("/ws", (in, out) ->
-                            out.sendString(Mono.just("{\"event\":\"CHAT_CONNECTED\",\"status\":\"OK\"}"))
-                    ))
+                    .route(routes -> routes
+                            .ws("/ws", (in, out) ->
+                                    out.sendString(Mono.just("{\"event\":\"CHAT_CONNECTED\",\"status\":\"OK\"}"))
+                            )
+                            .ws("/api/v1/ws", (in, out) ->
+                                    out.sendString(Mono.just("{\"event\":\"CHAT_CONNECTED_V1\",\"status\":\"OK\"}"))
+                            )
+                    )
                     .bindNow();
             mockWsPort = mockWsServer.port();
         } catch (IOException e) {
@@ -347,11 +352,13 @@ class GatewayRoutingAndSecurityIntegrationTest {
         mockHttpServer.createContext("/api/v1/second-hand/publications/users/101", exchange -> {
             try {
                 exchange.getRequestBody().readAllBytes();
+                String authHeader = exchange.getRequestHeaders().getFirst(HttpHeaders.AUTHORIZATION);
                 String userId = exchange.getRequestHeaders().getFirst("X-User-Id");
                 String userRoles = exchange.getRequestHeaders().getFirst("X-User-Roles");
                 String response = "{"
                         + "\"service\":\"ms-segunda-vida-donaciones\","
                         + "\"endpoint\":\"/api/v1/second-hand/publications/users/101\","
+                        + "\"receivedAuth\":\"" + (authHeader != null ? authHeader : "none") + "\","
                         + "\"receivedUserId\":\"" + (userId != null ? userId : "anonymous") + "\","
                         + "\"receivedUserRoles\":\"" + (userRoles != null ? userRoles : "none") + "\","
                         + "\"status\":\"UP\""
@@ -561,15 +568,25 @@ class GatewayRoutingAndSecurityIntegrationTest {
     }
 
     @Test
-    @DisplayName("Integración Consulta Pública: Consulta anónima GET /api/v1/second-hand es permitida (200 OK)")
-    void shouldAllowAnonymousAccessToPublicSecondHandConsultation() {
-        webTestClient.get()
-                .uri("/api/v1/second-hand")
+    @DisplayName("Integración Seguridad: Rutas no públicas de Donaciones/Segunda Mano (/second-hand, /photos, POST /health) son rechazadas con 401")
+    void shouldRejectAnonymousAccessToNonPublicSecondHandPhotosAndPostHealthWith401() {
+        for (String privateGetUri : List.of("/api/v1/second-hand", "/api/v1/second-hand/photos")) {
+            webTestClient.get()
+                    .uri(privateGetUri)
+                    .exchange()
+                    .expectStatus().isUnauthorized()
+                    .expectBody()
+                    .jsonPath("$.status").isEqualTo(401)
+                    .jsonPath("$.error").isEqualTo("Unauthorized");
+        }
+
+        webTestClient.post()
+                .uri("/api/v1/health")
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus().isUnauthorized()
                 .expectBody()
-                .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
-                .jsonPath("$.status").isEqualTo("UP");
+                .jsonPath("$.status").isEqualTo(401)
+                .jsonPath("$.error").isEqualTo("Unauthorized");
     }
 
     @Test
@@ -622,6 +639,7 @@ class GatewayRoutingAndSecurityIntegrationTest {
                 .expectStatus().isOk()
                 .expectBody()
                 .jsonPath("$.service").isEqualTo("ms-segunda-vida-donaciones")
+                .jsonPath("$.receivedAuth").isEqualTo("Bearer " + token)
                 .jsonPath("$.receivedUserId").isEqualTo("user-propietario-101");
     }
 
@@ -854,6 +872,48 @@ class GatewayRoutingAndSecurityIntegrationTest {
 
         org.junit.jupiter.api.Assertions.assertTrue(handshakeCompleted.get(), "El handshake WebSocket (101) debe completarse");
         org.junit.jupiter.api.Assertions.assertEquals("{\"event\":\"CHAT_CONNECTED\",\"status\":\"OK\"}", messageReceived.get());
+    }
+
+    @Test
+    @DisplayName("Integración Chat/WebSocket (/api/v1/ws): Handshake público 101 y comunicación bidireccional sin JWT")
+    void shouldPerformRealWebSocketHandshakeOnVersionedWsPathAndReceiveFrames() {
+        HttpResponseStatus status = reactor.netty.http.client.HttpClient.create()
+                .headers(h -> {
+                    h.set(HttpHeaderNames.UPGRADE, HttpHeaderValues.WEBSOCKET);
+                    h.set(HttpHeaderNames.CONNECTION, HttpHeaderValues.UPGRADE);
+                    h.set(HttpHeaderNames.SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==");
+                    h.set(HttpHeaderNames.SEC_WEBSOCKET_VERSION, "13");
+                })
+                .get()
+                .uri("http://127.0.0.1:" + gatewayPort + "/api/v1/ws")
+                .responseSingle((res, bytes) -> Mono.just(res.status()))
+                .block(Duration.ofSeconds(5));
+
+        org.junit.jupiter.api.Assertions.assertNotNull(status);
+        org.junit.jupiter.api.Assertions.assertEquals(101, status.code(),
+                "El handshake sobre /api/v1/ws a través del Gateway debe responder 101 Switching Protocols");
+
+        WebSocketClient client = new ReactorNettyWebSocketClient();
+        URI uri = URI.create("ws://127.0.0.1:" + gatewayPort + "/api/v1/ws");
+
+        AtomicReference<String> messageReceived = new AtomicReference<>();
+        AtomicBoolean handshakeCompleted = new AtomicBoolean(false);
+
+        Mono<Void> sessionMono = client.execute(uri, session -> {
+            handshakeCompleted.set(true);
+            return session.receive()
+                    .map(WebSocketMessage::getPayloadAsText)
+                    .take(1)
+                    .doOnNext(messageReceived::set)
+                    .then(session.close());
+        });
+
+        StepVerifier.create(sessionMono)
+                .expectComplete()
+                .verify(Duration.ofSeconds(5));
+
+        org.junit.jupiter.api.Assertions.assertTrue(handshakeCompleted.get(), "El handshake WebSocket sobre /api/v1/ws debe completarse");
+        org.junit.jupiter.api.Assertions.assertEquals("{\"event\":\"CHAT_CONNECTED_V1\",\"status\":\"OK\"}", messageReceived.get());
     }
 
     @Test

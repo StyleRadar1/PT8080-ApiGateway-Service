@@ -89,6 +89,22 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertTrue(routeUriMap.get("ms-chat-ws").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
         assertEquals("wss", routeUriMap.get("ms-chat-ws").getScheme());
 
+        Route chatConversationsRoute = routes.stream()
+                .filter(r -> "ms-chat-conversations".equals(r.getId()))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(chatConversationsRoute);
+        assertTrue(chatConversationsRoute.getPredicate().toString().contains("/api/v1/users/{userId}/conversations"),
+                "ms-chat-conversations en QA debe incluir /api/v1/users/{userId}/conversations");
+
+        Route chatWsRoute = routes.stream()
+                .filter(r -> "ms-chat-ws".equals(r.getId()))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(chatWsRoute);
+        assertTrue(chatWsRoute.getPredicate().toString().contains("/api/v1/ws"),
+                "ms-chat-ws en QA debe incluir /api/v1/ws");
+
         assertTrue(routeUriMap.containsKey("ms-usuarios"));
         assertTrue(routeUriMap.get("ms-usuarios").getHost().contains("styleradar-qa-app.azurewebsites.net"));
 
@@ -120,6 +136,7 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertEquals("styleradar-notificaciones-qa.azurewebsites.net", routeUriMap.get("ms-notificaciones-swagger").getHost());
         assertEquals("styleradar-qa-app.azurewebsites.net", routeUriMap.get("ms-usuarios-swagger").getHost());
         assertEquals("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net", routeUriMap.get("ms-chat-swagger").getHost());
+        assertEquals("sr-ms-estadisticas-qa.azurewebsites.net", routeUriMap.get("ms-estadisticas-swagger").getHost());
     }
 
     @Test

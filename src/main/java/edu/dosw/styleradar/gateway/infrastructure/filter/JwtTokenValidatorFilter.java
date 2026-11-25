@@ -30,11 +30,11 @@ import java.util.List;
 /**
  * Filtro perimetral reactivo de validación JWT y control de acceso (SR-RNF-08).
  * - Discrimina rutas públicas incondicionales (Swagger, Actuator, Auth) de rutas protegidas.
- * - Permite acceso anónimo a consultas públicas de publicaciones (/api/v1/second-hand, /api/v1/segunda-mano) bajo método GET.
+ * - Permite acceso anónimo únicamente a GET /api/v1/health, GET /api/v1/second-hand/publications y GET /api/v1/second-hand/publications/{id}.
  * - Mantiene protegidas con 401 Unauthorized las consultas privadas de donaciones (/api/v1/donations/**, /api/v1/donaciones/**),
  *   las consultas privadas de publicaciones por usuario (/api/v1/second-hand/user/**, /api/v1/segunda-mano/user/**)
  *   y las operaciones de creación, edición y donación (POST, PUT, PATCH, DELETE).
- * - Elimina cabeceras X-User-Id, X-User-Role y X-User-Roles entrantes del cliente para prevenir Spoofing.
+ * - Elimina cabeceras X-User-Id, X-User-Role, X-User-Roles, X-Almacen-Id, X-Store-Id y X-Foundation-Id entrantes del cliente para prevenir Spoofing.
  * - Valida la firma criptográfica HMAC-SHA256 de tokens Bearer JWT; rechaza con 401 si son inválidos o expirados.
  * - Inyecta X-User-Id, X-User-Role y X-User-Roles downstream ÚNICAMENTE a partir de claims autenticados en el token.
  */
@@ -46,14 +46,14 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     public static final String USER_ROLE_HEADER = "X-User-Role";
     public static final String USER_ROLES_HEADER = "X-User-Roles";
     public static final String ALMACEN_ID_HEADER = "X-Almacen-Id";
+    public static final String STORE_ID_HEADER = "X-Store-Id";
+    public static final String FOUNDATION_ID_HEADER = "X-Foundation-Id";
     public static final String SSE_STREAM_PURPOSE = "sse-stream";
 
     public static final List<String> DEFAULT_PUBLIC_PATHS = List.of(
             "/actuator/health",
             "/actuator/health/**",
             "/actuator/info",
-            "/api/v1/health",
-            "/api/v1/health/**",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs",
@@ -62,6 +62,8 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/fallback/**",
             "/favicon.ico",
             "/webjars/**",
+            "/api/v1/ws",
+            "/api/v1/ws/**",
             "/ws",
             "/ws/**",
             "/ws-chat",
@@ -70,13 +72,10 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     );
 
     public static final List<String> DEFAULT_PUBLIC_GET_PATHS = List.of(
-            "/api/v1/second-hand",
-            "/api/v1/second-hand/",
+            "/api/v1/health",
             "/api/v1/second-hand/publications",
             "/api/v1/second-hand/publications/",
             "/api/v1/second-hand/publications/*",
-            "/api/v1/second-hand/photos",
-            "/api/v1/second-hand/photos/**",
             "/api/v1/stores",
             "/api/v1/stores/",
             "/api/v1/stores/*",
@@ -84,7 +83,6 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
             "/api/v1/stores/*/low-stock-threshold",
             "/api/v1/stores/*/new-arrival-days",
             "/api/v1/stores/*/photos",
-            "/api/v1/stores/*/photos/*",
             "/api/v1/foundations",
             "/api/v1/foundations/",
             "/api/v1/garments",
@@ -122,8 +120,6 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
     );
 
     public static final List<String> DEFAULT_PUBLIC_POST_PATHS = List.of(
-            "/api/v1/usuarios",
-            "/api/v1/usuarios/",
             "/api/v1/users",
             "/api/v1/users/"
     );
@@ -181,13 +177,15 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        // 1. Sanear cabeceras: eliminar cualquier X-User-Id, X-User-Role o X-User-Roles recibido del cliente (Prevenir Spoofing)
+        // 1. Sanear cabeceras: eliminar cualquier X-User-*, X-Almacen-Id, X-Store-Id o X-Foundation-Id recibido del cliente (Prevenir Spoofing)
         ServerHttpRequest.Builder requestBuilder = request.mutate();
         requestBuilder.headers(httpHeaders -> {
             httpHeaders.remove(USER_ID_HEADER);
             httpHeaders.remove(USER_ROLE_HEADER);
             httpHeaders.remove(USER_ROLES_HEADER);
             httpHeaders.remove(ALMACEN_ID_HEADER);
+            httpHeaders.remove(STORE_ID_HEADER);
+            httpHeaders.remove(FOUNDATION_ID_HEADER);
         });
 
         String authHeader = request.getHeaders().getFirst(HttpHeaders.AUTHORIZATION);

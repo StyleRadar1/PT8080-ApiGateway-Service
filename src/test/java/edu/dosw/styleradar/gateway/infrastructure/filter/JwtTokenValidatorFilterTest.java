@@ -97,6 +97,8 @@ class JwtTokenValidatorFilterTest {
                 .header(JwtTokenValidatorFilter.USER_ID_HEADER, "spoofed-user")
                 .header(JwtTokenValidatorFilter.USER_ROLE_HEADER, "ROLE_SUPERADMIN")
                 .header(JwtTokenValidatorFilter.USER_ROLES_HEADER, "ROLE_SUPERADMIN")
+                .header(JwtTokenValidatorFilter.STORE_ID_HEADER, "spoofed-store")
+                .header(JwtTokenValidatorFilter.FOUNDATION_ID_HEADER, "spoofed-foundation")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
@@ -107,6 +109,10 @@ class JwtTokenValidatorFilterTest {
             assertEquals("user-999-portal8080", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
             assertEquals("ROLE_CLIENTE", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLE_HEADER));
             assertEquals("ROLE_CLIENTE", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ROLES_HEADER));
+            assertNull(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.STORE_ID_HEADER),
+                    "X-Store-Id entrante del cliente debe eliminarse para prevenir spoofing");
+            assertNull(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.FOUNDATION_ID_HEADER),
+                    "X-Foundation-Id entrante del cliente debe eliminarse para prevenir spoofing");
             return Mono.empty();
         });
 
@@ -228,6 +234,8 @@ class JwtTokenValidatorFilterTest {
         assertFalse(filter.isPublicPath("/api/v1/auth/logout"));
         assertFalse(filter.isPublicPath("/api/v1/auth/logout/all"));
         assertTrue(filter.isPublicPath("/fallback/probador"));
+        assertTrue(filter.isPublicPath("/api/v1/ws"));
+        assertTrue(filter.isPublicPath("/api/v1/ws/info"));
         assertTrue(filter.isPublicPath("/ws"));
         assertTrue(filter.isPublicPath("/ws/chat"));
         assertTrue(filter.isPublicPath("/ws-chat"));
@@ -271,22 +279,21 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("Consulta Pública GET vs Rutas Privadas: Permite catálogo público (/second-hand, /publications) pero bloquea donaciones, pendientes, conversaciones y consultas por usuario")
+    @DisplayName("Consulta Pública GET vs Rutas Privadas: Permite GET /health y /publications pero bloquea /second-hand raíz, /photos, donaciones, pendientes y conversaciones")
     void isPublicRequest_permiteCatalogoPublicoYBloqueaConsultasPrivadas() {
-        MockServerHttpRequest getSecondHand = MockServerHttpRequest.get("/api/v1/second-hand").build();
         MockServerHttpRequest getPublications = MockServerHttpRequest.get("/api/v1/second-hand/publications").build();
         MockServerHttpRequest getPublicationDetail = MockServerHttpRequest.get("/api/v1/second-hand/publications/pub-456").build();
+        MockServerHttpRequest getHealth = MockServerHttpRequest.get("/api/v1/health").build();
 
-        assertTrue(filter.isPublicRequest(getSecondHand), "GET /second-hand debe ser público");
         assertTrue(filter.isPublicRequest(getPublications), "GET /second-hand/publications debe ser público");
         assertTrue(filter.isPublicRequest(getPublicationDetail), "GET /second-hand/publications/{id} debe ser público");
-
-        MockServerHttpRequest getHealth = MockServerHttpRequest.get("/api/v1/health").build();
-        MockServerHttpRequest getPhotos = MockServerHttpRequest.get("/api/v1/second-hand/photos").build();
-        MockServerHttpRequest getPhotoDetail = MockServerHttpRequest.get("/api/v1/second-hand/photos/123").build();
         assertTrue(filter.isPublicRequest(getHealth), "GET /api/v1/health debe ser público");
-        assertTrue(filter.isPublicRequest(getPhotos), "GET /second-hand/photos debe ser público");
-        assertTrue(filter.isPublicRequest(getPhotoDetail), "GET /second-hand/photos/{id} debe ser público");
+
+        // Rutas protegidas de segunda mano y health mutante
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/second-hand").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/second-hand/photos").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/second-hand/photos/123").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.post("/api/v1/health").build()));
 
         // Rutas privadas: consultas por usuario, moderación pendiente y conversaciones
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/second-hand/user/101").build()));
@@ -294,6 +301,7 @@ class JwtTokenValidatorFilterTest {
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/prendas/pendientes").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/prendas/pendientes/almacenes/1").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/users/conversations").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/users/42/conversations").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/stores/conversations").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/stores/900555777-1/conversations").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/10/conversations").build()));
@@ -303,8 +311,15 @@ class JwtTokenValidatorFilterTest {
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/don-456").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/donors/101").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/foundations").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/foundations/501").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/foundations/501/requests").build()));
         assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/donations/foundations/representative").build()));
+
+        // Estadísticas (ningún endpoint bajo /api/v1/statistics/** es público)
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/statistics/summary/totals/PLATFORM_MONTHLY_DONATIONS").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/statistics/time-series/PLATFORM_USER_REGISTRATIONS").build()));
+        assertFalse(filter.isPublicRequest(MockServerHttpRequest.get("/api/v1/statistics/distributions/STORE_INVENTORY_BY_STATE").build()));
     }
 
     @Test
@@ -382,8 +397,8 @@ class JwtTokenValidatorFilterTest {
     @Test
     @DisplayName("Filter GET Consulta Publicaciones: Acceso anónimo fluye hacia downstream sin requerir token")
     void filter_consultaGetPublicacionesSinToken_permiteContinuar() {
-        // 1. /api/v1/second-hand
-        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/second-hand").build();
+        // 1. GET /api/v1/health
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/health").build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
         AtomicBoolean chainCalled = new AtomicBoolean(false);
         Mono<Void> result = filter.filter(exchange, ex -> {
@@ -391,7 +406,7 @@ class JwtTokenValidatorFilterTest {
             return Mono.empty();
         });
         StepVerifier.create(result).verifyComplete();
-        assertTrue(chainCalled.get(), "La consulta GET pública /second-hand debe fluir hacia downstream");
+        assertTrue(chainCalled.get(), "La consulta GET pública /api/v1/health debe fluir hacia downstream");
         assertNotEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
 
         // 2. /api/v1/second-hand/publications (catálogo canónico)
@@ -593,8 +608,16 @@ class JwtTokenValidatorFilterTest {
         assertTrue(filter.isPublicRequest(storesNitReq), "GET /api/v1/stores/{nit} debe ser público");
         MockServerHttpRequest storePhotosReq = MockServerHttpRequest.get("/api/v1/stores/900555777-1/photos").build();
         assertTrue(filter.isPublicRequest(storePhotosReq), "GET /api/v1/stores/{nit}/photos debe ser público");
+        MockServerHttpRequest getSingleStorePhotoReq = MockServerHttpRequest.get("/api/v1/stores/900555777-1/photos/42").build();
+        assertFalse(filter.isPublicRequest(getSingleStorePhotoReq), "GET /api/v1/stores/{nit}/photos/{photoId} no debe ser público");
+        MockServerHttpRequest deleteStorePhotoReq = MockServerHttpRequest.delete("/api/v1/stores/900555777-1/photos/42").build();
+        assertFalse(filter.isPublicRequest(deleteStorePhotoReq), "DELETE /api/v1/stores/{nit}/photos/{photoId} no debe ser público");
         MockServerHttpRequest postStorePhotosReq = MockServerHttpRequest.post("/api/v1/stores/900555777-1/photos").build();
         assertFalse(filter.isPublicRequest(postStorePhotosReq), "POST /api/v1/stores/{nit}/photos no debe ser público");
+        MockServerHttpRequest deleteAdminStoreReq = MockServerHttpRequest.delete("/api/v1/admin/stores/900555777-1").build();
+        assertFalse(filter.isPublicRequest(deleteAdminStoreReq), "DELETE /api/v1/admin/stores/{nit} no debe ser público");
+        MockServerHttpRequest deleteAdminFoundationReq = MockServerHttpRequest.delete("/api/v1/admin/foundations/5").build();
+        assertFalse(filter.isPublicRequest(deleteAdminFoundationReq), "DELETE /api/v1/admin/foundations/{id} no debe ser público");
         MockServerHttpRequest foundationsReq = MockServerHttpRequest.get("/api/v1/foundations").build();
         assertTrue(filter.isPublicRequest(foundationsReq), "GET /api/v1/foundations debe ser público");
 
@@ -894,11 +917,13 @@ class JwtTokenValidatorFilterTest {
     }
 
     @Test
-    @DisplayName("Registro de usuarios (CADCHE-Users-Service): POST /api/v1/usuarios es público sin JWT, pero rechaza token inválido y protege GET/PUT/DELETE y subrutas")
+    @DisplayName("Registro de usuarios (CADCHE-Users-Service): POST /api/v1/users es público sin JWT, pero rechaza token inválido y protege /usuarios, internas y subrutas")
     void filter_registroUsuariosPostPublicoYSubrutasProtegidas() {
         assertFalse(filter.isPublicPostPath(null));
+        assertFalse(filter.isPublicPostPath("/api/v1/usuarios"));
+        assertFalse(filter.isPublicPostPath("/api/v1/usuarios/"));
 
-        for (String publicPostUri : List.of("/api/v1/usuarios", "/api/v1/usuarios/", "/api/v1/users", "/api/v1/users/")) {
+        for (String publicPostUri : List.of("/api/v1/users", "/api/v1/users/")) {
             MockServerWebExchange postAnon = MockServerWebExchange.from(
                     MockServerHttpRequest.post(publicPostUri).build()
             );
@@ -924,6 +949,7 @@ class JwtTokenValidatorFilterTest {
         }
 
         for (MockServerHttpRequest protectedReq : List.of(
+                MockServerHttpRequest.post("/api/v1/usuarios").build(),
                 MockServerHttpRequest.get("/api/v1/usuarios").build(),
                 MockServerHttpRequest.get("/api/v1/usuarios/me").build(),
                 MockServerHttpRequest.put("/api/v1/usuarios/me").build(),
@@ -934,8 +960,11 @@ class JwtTokenValidatorFilterTest {
                 MockServerHttpRequest.put("/api/v1/users/12").build(),
                 MockServerHttpRequest.get("/api/v1/users/12/feed").build(),
                 MockServerHttpRequest.post("/api/v1/users/12/saved-searches").build(),
+                MockServerHttpRequest.delete("/api/v1/users/12/saved-searches/99").build(),
                 MockServerHttpRequest.get("/api/v1/admin/users").build(),
-                MockServerHttpRequest.patch("/api/v1/admin/users/12/status").build()
+                MockServerHttpRequest.patch("/api/v1/admin/users/12/status").build(),
+                MockServerHttpRequest.delete("/api/v1/admin/users/12").build(),
+                MockServerHttpRequest.get("/api/v1/internal/users/12/measurements").build()
         )) {
             MockServerWebExchange ex = MockServerWebExchange.from(protectedReq);
             AtomicBoolean passed = new AtomicBoolean(false);
