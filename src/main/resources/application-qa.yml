@@ -138,7 +138,7 @@ spring:
         - id: ms-inventario
           uri: ${INVENTARIO_SERVICE_URL:https://rst-inventory-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
           predicates:
-            - Path=/api/v1/inventario, /api/v1/inventario/**
+            - Path=/api/v1/inventory, /api/v1/inventory/**, /api/v1/inventario, /api/v1/inventario/**
 
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:https://rst-itemcatalog-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io}

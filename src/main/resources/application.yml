@@ -160,7 +160,7 @@ spring:
         - id: ms-inventario
           uri: ${INVENTARIO_SERVICE_URL:http://localhost:8200}
           predicates:
-            - Path=/api/v1/inventario, /api/v1/inventario/**
+            - Path=/api/v1/inventory, /api/v1/inventory/**, /api/v1/inventario, /api/v1/inventario/**
 
         # ms-item-catalogo: Catálogo de Prendas y Búsqueda (Puerto 8220)
         - id: ms-item-catalogo

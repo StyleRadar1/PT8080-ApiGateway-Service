@@ -195,6 +195,37 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
     }
 
     @Test
+    @DisplayName("Inventario en inglés: las consultas llegan a Inventario sin token")
+    void shouldRouteEnglishInventoryQueries() {
+        assertRoutedTo("/api/v1/inventory/garments/42", "ms-inventario");
+        assertRoutedTo("/api/v1/inventory/garments/42/availability", "ms-inventario");
+        assertRoutedTo("/api/v1/inventory/branches/7/available", "ms-inventario");
+        assertRoutedTo("/api/v1/inventory/sizes/M/garments", "ms-inventario");
+    }
+
+    @Test
+    @DisplayName("Inventario en inglés: registrar, ajustar y reservar siguen exigiendo token")
+    void shouldProtectEnglishInventoryWrites() {
+        for (String uri : List.of("/api/v1/inventory", "/api/v1/inventory/batch", "/api/v1/inventory/reservations")) {
+            webTestClient.post().uri(uri).exchange().expectStatus().isUnauthorized();
+        }
+        String token = token("9", List.of("STORE_ADMIN"), null);
+        webTestClient.post().uri("/api/v1/inventory/reservations")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
+
+        webTestClient.put().uri("/api/v1/inventory/5/adjustment").exchange().expectStatus().isUnauthorized();
+        webTestClient.patch().uri("/api/v1/inventory/garments/42/branches/7/sizes/M").exchange()
+                .expectStatus().isUnauthorized();
+        webTestClient.put().uri("/api/v1/inventory/5/adjustment")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
+        webTestClient.patch().uri("/api/v1/inventory/garments/42/branches/7/sizes/M")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
+    }
+
+    @Test
     @DisplayName("Tiendas: rutas reales (/stores) llegan a Tiendas y rutas obsoletas (/almacenes/{id}) no caen alli")
     void shouldKeepOtherAlmacenesRoutesInTiendas() {
         String token = token("7", List.of("ADMIN_STYLERADAR"), null);
