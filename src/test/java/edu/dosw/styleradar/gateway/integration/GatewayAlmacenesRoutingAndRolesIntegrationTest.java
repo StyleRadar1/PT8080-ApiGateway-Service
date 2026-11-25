@@ -213,6 +213,16 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
         webTestClient.post().uri("/api/v1/inventory/reservations")
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
                 .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
+
+        webTestClient.put().uri("/api/v1/inventory/5/adjustment").exchange().expectStatus().isUnauthorized();
+        webTestClient.patch().uri("/api/v1/inventory/garments/42/branches/7/sizes/M").exchange()
+                .expectStatus().isUnauthorized();
+        webTestClient.put().uri("/api/v1/inventory/5/adjustment")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
+        webTestClient.patch().uri("/api/v1/inventory/garments/42/branches/7/sizes/M")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token).exchange()
+                .expectStatus().isOk().expectBody().jsonPath("$.service").isEqualTo("ms-inventario");
     }
 
     @Test
