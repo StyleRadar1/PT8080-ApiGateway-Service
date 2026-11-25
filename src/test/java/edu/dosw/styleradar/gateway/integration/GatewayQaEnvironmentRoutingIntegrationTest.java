@@ -30,6 +30,9 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
     @Autowired
     private RouteLocator routeLocator;
 
+    @org.springframework.beans.factory.annotation.Value("${styleradar.gateway.trusted-proxies:}")
+    private List<String> qaTrustedProxies;
+
     @Test
     @DisplayName("Ambiente QA: Certifica que ninguna ruta en QA apunte a localhost")
     void shouldVerifyNoRouteInQaPointsToLocalhost() {
@@ -89,6 +92,22 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertTrue(routeUriMap.get("ms-chat-ws").getHost().contains("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net"));
         assertEquals("wss", routeUriMap.get("ms-chat-ws").getScheme());
 
+        Route chatConversationsRoute = routes.stream()
+                .filter(r -> "ms-chat-conversations".equals(r.getId()))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(chatConversationsRoute);
+        assertTrue(chatConversationsRoute.getPredicate().toString().contains("/api/v1/users/{userId}/conversations"),
+                "ms-chat-conversations en QA debe incluir /api/v1/users/{userId}/conversations");
+
+        Route chatWsRoute = routes.stream()
+                .filter(r -> "ms-chat-ws".equals(r.getId()))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(chatWsRoute);
+        assertTrue(chatWsRoute.getPredicate().toString().contains("/api/v1/ws"),
+                "ms-chat-ws en QA debe incluir /api/v1/ws");
+
         assertTrue(routeUriMap.containsKey("ms-usuarios"));
         assertTrue(routeUriMap.get("ms-usuarios").getHost().contains("styleradar-qa-app.azurewebsites.net"));
 
@@ -120,6 +139,7 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
         assertEquals("styleradar-notificaciones-qa.azurewebsites.net", routeUriMap.get("ms-notificaciones-swagger").getHost());
         assertEquals("styleradar-qa-app.azurewebsites.net", routeUriMap.get("ms-usuarios-swagger").getHost());
         assertEquals("gj-chat-service-qa-santi-gxhjccffcxdgbfcj.canadacentral-01.azurewebsites.net", routeUriMap.get("ms-chat-swagger").getHost());
+        assertEquals("sr-ms-estadisticas-qa.azurewebsites.net", routeUriMap.get("ms-estadisticas-swagger").getHost());
     }
 
     @Test
@@ -139,5 +159,15 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
                 "Debe incluir el prefijo estandarizado /api/v1/donations/**");
         assertTrue(predicateString.contains("/api/v1/second-hand") || predicateString.contains("second-hand"),
                 "Debe incluir el prefijo estandarizado /api/v1/second-hand/**");
+    }
+
+    @Test
+    @DisplayName("Ambiente QA: Certifica que trusted-proxies incluya el rango de reverse proxy de Azure App Service Linux (169.254.0.0/16)")
+    void shouldConfigureAzureTrustedProxyCidrsInQa() {
+        assertNotNull(qaTrustedProxies);
+        assertTrue(qaTrustedProxies.contains("169.254.0.0/16"),
+                "QA debe confiar en el bridge/proxy interno link-local de Azure App Service Linux (169.254.0.0/16)");
+        assertTrue(qaTrustedProxies.contains("172.16.0.0/12"));
+        assertTrue(qaTrustedProxies.contains("10.0.0.0/8"));
     }
 }
