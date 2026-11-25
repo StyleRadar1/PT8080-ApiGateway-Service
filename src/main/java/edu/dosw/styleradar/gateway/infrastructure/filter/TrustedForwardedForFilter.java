@@ -65,9 +65,6 @@ public class TrustedForwardedForFilter implements GlobalFilter, Ordered {
     }
 
     String resolveClientIp(ServerHttpRequest request) {
-        if (request == null) {
-            return null;
-        }
         String remoteIp = extractRemoteIp(request.getRemoteAddress());
         if (remoteIp == null) {
             return null;
@@ -241,9 +238,17 @@ public class TrustedForwardedForFilter implements GlobalFilter, Ordered {
         }
     }
 
-    private record CidrBlock(byte[] network, int prefixBits) {
+    private static final class CidrBlock {
+        private final byte[] network;
+        private final int prefixBits;
+
+        private CidrBlock(byte[] network, int prefixBits) {
+            this.network = network;
+            this.prefixBits = prefixBits;
+        }
+
         boolean matches(byte[] candidate) {
-            if (candidate == null || candidate.length != network.length) {
+            if (candidate.length != network.length) {
                 return false;
             }
             int fullBytes = prefixBits / 8;

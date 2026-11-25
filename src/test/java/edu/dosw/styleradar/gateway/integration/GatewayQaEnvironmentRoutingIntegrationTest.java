@@ -30,6 +30,9 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
     @Autowired
     private RouteLocator routeLocator;
 
+    @org.springframework.beans.factory.annotation.Value("${styleradar.gateway.trusted-proxies:}")
+    private List<String> qaTrustedProxies;
+
     @Test
     @DisplayName("Ambiente QA: Certifica que ninguna ruta en QA apunte a localhost")
     void shouldVerifyNoRouteInQaPointsToLocalhost() {
@@ -156,5 +159,15 @@ class GatewayQaEnvironmentRoutingIntegrationTest {
                 "Debe incluir el prefijo estandarizado /api/v1/donations/**");
         assertTrue(predicateString.contains("/api/v1/second-hand") || predicateString.contains("second-hand"),
                 "Debe incluir el prefijo estandarizado /api/v1/second-hand/**");
+    }
+
+    @Test
+    @DisplayName("Ambiente QA: Certifica que trusted-proxies incluya el rango de reverse proxy de Azure App Service Linux (169.254.0.0/16)")
+    void shouldConfigureAzureTrustedProxyCidrsInQa() {
+        assertNotNull(qaTrustedProxies);
+        assertTrue(qaTrustedProxies.contains("169.254.0.0/16"),
+                "QA debe confiar en el bridge/proxy interno link-local de Azure App Service Linux (169.254.0.0/16)");
+        assertTrue(qaTrustedProxies.contains("172.16.0.0/12"));
+        assertTrue(qaTrustedProxies.contains("10.0.0.0/8"));
     }
 }

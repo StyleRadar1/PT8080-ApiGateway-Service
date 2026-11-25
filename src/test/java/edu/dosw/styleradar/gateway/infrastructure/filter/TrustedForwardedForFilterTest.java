@@ -47,12 +47,14 @@ class TrustedForwardedForFilterTest {
     }
 
     @Test
-    @DisplayName("Proxy confiable con cadena contaminada y puerto Azure ARR: toma la IP derecha no confiable")
-    void trustedProxyExtractsRightmostUntrustedIpStrippingClientSpoofAndPort() {
-        TrustedForwardedForFilter filter = new TrustedForwardedForFilter(List.of("172.16.0.0/12"));
+    @DisplayName("Proxy confiable Azure App Service Linux (169.254.0.0/16) y ARR con puerto: toma la IP derecha no confiable")
+    void trustedAzureLinuxProxyExtractsRightmostUntrustedIpStrippingClientSpoofAndPort() {
+        TrustedForwardedForFilter filter = new TrustedForwardedForFilter(
+                List.of("169.254.0.0/16", "172.16.0.0/12")
+        );
 
         MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/auth/login")
-                .remoteAddress(new InetSocketAddress("172.16.1.4", 443))
+                .remoteAddress(new InetSocketAddress("169.254.129.1", 443))
                 .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "1.2.3.4, 203.0.113.45:54321")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
@@ -87,14 +89,14 @@ class TrustedForwardedForFilterTest {
     }
 
     @Test
-    @DisplayName("Múltiples cabeceras X-Forwarded-For desde proxy confiable: toma la derecha no confiable")
+    @DisplayName("Múltiples cabeceras X-Forwarded-For desde proxy confiable: ignora vacíos y toma la derecha no confiable")
     void multipleXForwardedForHeadersTakeRightmostUntrustedIp() {
         TrustedForwardedForFilter filter = new TrustedForwardedForFilter(List.of("172.16.0.0/12"));
 
         MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/auth/login")
                 .remoteAddress(new InetSocketAddress("172.16.1.4", 8080))
                 .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "1.2.3.4")
-                .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "198.51.100.88")
+                .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "   ", " , 198.51.100.88 ")
                 .build();
         MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
@@ -105,6 +107,36 @@ class TrustedForwardedForFilterTest {
         })).verifyComplete();
 
         assertEquals(List.of("198.51.100.88"), forwardedForSent.get());
+    }
+
+    @Test
+    @DisplayName("Fallback X-Real-IP: usa X-Real-IP válido si no hubo X-Forwarded-For y cae a remoteIp si X-Real-IP es proxy confiable")
+    void fallbackToXRealIpAndRemoteIpWhenNeeded() {
+        TrustedForwardedForFilter filter = new TrustedForwardedForFilter(List.of("172.16.0.0/12"));
+
+        MockServerHttpRequest reqWithRealIp = MockServerHttpRequest.post("/api/v1/auth/login")
+                .remoteAddress(new InetSocketAddress("172.16.1.4", 8080))
+                .header(TrustedForwardedForFilter.X_REAL_IP_HEADER, "203.0.113.77")
+                .build();
+        AtomicReference<String> resolvedRealIp = new AtomicReference<>();
+        StepVerifier.create(filter.filter(MockServerWebExchange.from(reqWithRealIp), ex -> {
+            resolvedRealIp.set(ex.getRequest().getHeaders().getFirst(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertEquals("203.0.113.77", resolvedRealIp.get());
+
+        // Todos los saltos son proxies confiables -> cae a X-Real-IP no confiable o a remoteIp si X-Real-IP también es confiable
+        MockServerHttpRequest reqAllTrusted = MockServerHttpRequest.post("/api/v1/auth/login")
+                .remoteAddress(new InetSocketAddress("172.16.1.4", 8080))
+                .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "172.16.2.1")
+                .header(TrustedForwardedForFilter.X_REAL_IP_HEADER, "172.16.3.1")
+                .build();
+        AtomicReference<String> fallbackRemote = new AtomicReference<>();
+        StepVerifier.create(filter.filter(MockServerWebExchange.from(reqAllTrusted), ex -> {
+            fallbackRemote.set(ex.getRequest().getHeaders().getFirst(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertEquals("172.16.1.4", fallbackRemote.get());
     }
 
     @Test
@@ -128,42 +160,73 @@ class TrustedForwardedForFilterTest {
     }
 
     @Test
-    @DisplayName("Fail-closed con lista vacía de proxies: ni loopback puede inyectar X-Forwarded-For")
-    void emptyTrustedProxiesListIsFailClosedEvenForLoopback() {
-        TrustedForwardedForFilter filter = new TrustedForwardedForFilter(List.of());
+    @DisplayName("Fail-closed con lista vacía o null: ni loopback puede inyectar X-Forwarded-For y sin remoteAddress no inyecta cabecera")
+    void emptyOrNullTrustedProxiesIsFailClosedAndNullRemoteAddressStripsHeaders() {
+        TrustedForwardedForFilter emptyFilter = new TrustedForwardedForFilter(List.of());
+        TrustedForwardedForFilter nullListFilter = new TrustedForwardedForFilter(null);
+        assertFalse(nullListFilter.isTrustedProxy("127.0.0.1"));
 
         MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/auth/login")
                 .remoteAddress(new InetSocketAddress("127.0.0.1", 55000))
                 .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "203.0.113.45")
                 .build();
-        MockServerWebExchange exchange = MockServerWebExchange.from(request);
 
         AtomicReference<List<String>> forwardedForSent = new AtomicReference<>();
-        StepVerifier.create(filter.filter(exchange, ex -> {
+        StepVerifier.create(emptyFilter.filter(MockServerWebExchange.from(request), ex -> {
             forwardedForSent.set(ex.getRequest().getHeaders().get(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER));
             return Mono.empty();
         })).verifyComplete();
-
         assertEquals(List.of("127.0.0.1"), forwardedForSent.get());
+
+        // remoteAddress nulo: limpia las cabeceras heredadas y no agrega X-Forwarded-For
+        MockServerHttpRequest noRemoteReq = MockServerHttpRequest.post("/api/v1/auth/login")
+                .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "203.0.113.45")
+                .build();
+        AtomicReference<String> noRemoteHeader = new AtomicReference<>();
+        StepVerifier.create(emptyFilter.filter(MockServerWebExchange.from(noRemoteReq), ex -> {
+            noRemoteHeader.set(ex.getRequest().getHeaders().getFirst(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+        assertNull(noRemoteHeader.get());
     }
 
     @Test
-    @DisplayName("Soporta IPv6 con corchetes y puerto en extracción de IP literal")
-    void extractsIpv6WithBracketsAndPort() {
-        TrustedForwardedForFilter filter = new TrustedForwardedForFilter(List.of("::1"));
+    @DisplayName("Soporta dirección no resuelta (createUnresolved), IPv6 con corchetes/zone ID y descarta formatos malformados")
+    void extractsUnresolvedAddressIpv6VariantsAndRejectsMalformedLiterals() {
+        TrustedForwardedForFilter filter = new TrustedForwardedForFilter(
+                List.of("", " , ", "invalid-cidr/24", "10.0.0.0/99", "10.0.0.0/-1", "10.0.0.0/abc", "172.16.0.0/12", "::1")
+        );
 
-        MockServerHttpRequest request = MockServerHttpRequest.post("/api/v1/auth/login")
+        // Unresolved InetSocketAddress
+        MockServerHttpRequest unresolvedReq = MockServerHttpRequest.post("/api/v1/auth/login")
+                .remoteAddress(InetSocketAddress.createUnresolved("198.51.100.10", 80))
+                .build();
+        assertEquals("198.51.100.10", filter.resolveClientIp(unresolvedReq));
+
+        // IPv6 con corchetes y puerto
+        MockServerHttpRequest ipv6Req = MockServerHttpRequest.post("/api/v1/auth/login")
                 .remoteAddress(new InetSocketAddress("0:0:0:0:0:0:0:1", 443))
                 .header(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER, "[2001:db8::1]:8443")
                 .build();
-        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+        assertEquals("2001:db8::1", filter.resolveClientIp(ipv6Req));
 
-        AtomicReference<List<String>> forwardedForSent = new AtomicReference<>();
-        StepVerifier.create(filter.filter(exchange, ex -> {
-            forwardedForSent.set(ex.getRequest().getHeaders().get(TrustedForwardedForFilter.X_FORWARDED_FOR_HEADER));
-            return Mono.empty();
-        })).verifyComplete();
+        // Coincidencia y no coincidencia de CIDR no alineado a byte + mismatch IPv4/IPv6
+        assertTrue(filter.isTrustedProxy("172.31.255.254"));
+        assertFalse(filter.isTrustedProxy("172.32.0.1"));
+        assertFalse(filter.isTrustedProxy("2001:db8::2"));
+        assertFalse(filter.isTrustedProxy(null));
+        assertFalse(filter.isTrustedProxy("not-an-ip"));
 
-        assertEquals(List.of("2001:db8::1"), forwardedForSent.get());
+        // Extracción directa de literales IP
+        assertEquals("2001:db8::1", TrustedForwardedForFilter.extractIpLiteral("[2001:db8::1]"));
+        assertEquals("fe80::1", TrustedForwardedForFilter.extractIpLiteral("fe80::1%eth0"));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral(null));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral(""));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral("a".repeat(65)));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral("[2001:db8::1"));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral("[2001:db8::1]:abc"));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral("203.0.113.45:abc"));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral("999.999.999.999"));
+        assertNull(TrustedForwardedForFilter.extractIpLiteral("2001:db8:::1"));
     }
 }
