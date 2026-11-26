@@ -1,5 +1,6 @@
 package edu.dosw.styleradar.gateway.infrastructure.filter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -25,7 +26,9 @@ import reactor.core.publisher.Mono;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Filtro perimetral reactivo de validación JWT y control de acceso (SR-RNF-08).
@@ -277,17 +280,25 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
                 if (downstreamRoles != null && !downstreamRoles.isBlank()) {
                     requestBuilder.header(USER_ROLES_HEADER, downstreamRoles);
                 }
-                // X-Almacen-Id solo se deriva de claims firmados del JWT, nunca del cliente
+                // X-Almacen-Id, X-Store-Id y X-Foundation-Id solo se derivan de claims firmados del JWT, nunca del cliente
                 String almacenId = extractAlmacenId(claims);
                 if (almacenId != null) {
                     requestBuilder.header(ALMACEN_ID_HEADER, almacenId);
+                }
+                String storeId = extractStoreId(claims);
+                if (storeId != null) {
+                    requestBuilder.header(STORE_ID_HEADER, storeId);
+                }
+                String foundationId = extractFoundationId(claims);
+                if (foundationId != null) {
+                    requestBuilder.header(FOUNDATION_ID_HEADER, foundationId);
                 }
 
                 log.debug("[Gateway] Token JWT validado exitosamente. Usuario: {}, Rol: {}, Roles: {}", userId, role, rolesStr);
             } catch (Exception ex) {
                 log.warn("[Gateway] Petición rechazada (401): Token JWT inválido o expirado ({}) hacia {}",
                         ex.getMessage(), path);
-                return onError(exchange, "Token JWT inválido o expirado: " + ex.getMessage(), HttpStatus.UNAUTHORIZED);
+                return onError(exchange, "Token JWT inválido o expirado", HttpStatus.UNAUTHORIZED);
             }
         }
 
@@ -507,8 +518,25 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         }
         return out.isEmpty() ? null : String.join(",", out);
     }
+    private static final ObjectMapper ERROR_OBJECT_MAPPER = new ObjectMapper();
+
     static String extractAlmacenId(Claims claims) {
-        for (String key : new String[]{"almacenId", "almacen_id", "storeId", "store_id"}) {
+        return extractClaimIdentifier(claims, "almacenId", "almacen_id", "storeId", "store_id");
+    }
+
+    static String extractStoreId(Claims claims) {
+        return extractClaimIdentifier(claims, "storeId", "store_id", "almacenId", "almacen_id");
+    }
+
+    static String extractFoundationId(Claims claims) {
+        return extractClaimIdentifier(claims, "foundationId", "foundation_id", "fundacionId", "fundacion_id");
+    }
+
+    private static String extractClaimIdentifier(Claims claims, String... keys) {
+        if (claims == null) {
+            return null;
+        }
+        for (String key : keys) {
             Object raw = claims.get(key);
             if (raw != null && raw.toString().matches("[A-Za-z0-9_-]{1,64}")) {
                 return raw.toString();
@@ -521,9 +549,32 @@ public class JwtTokenValidatorFilter implements GlobalFilter, Ordered {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        String body = String.format("{\"error\":\"%s\",\"message\":\"%s\",\"status\":%d}",
-                status.getReasonPhrase(), message, status.value());
-        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
+
+        String correlationId = GlobalRequestLoggingFilter.resolveOrCreateCorrelationId(exchange);
+        String requestId = GlobalRequestLoggingFilter.resolveOrCreateRequestId(exchange, correlationId);
+        if (!response.getHeaders().containsKey(GlobalRequestLoggingFilter.CORRELATION_ID_HEADER)) {
+            response.getHeaders().add(GlobalRequestLoggingFilter.CORRELATION_ID_HEADER, correlationId);
+        }
+        if (!response.getHeaders().containsKey(GlobalRequestLoggingFilter.REQUEST_ID_HEADER)) {
+            response.getHeaders().add(GlobalRequestLoggingFilter.REQUEST_ID_HEADER, requestId);
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("error", status.getReasonPhrase());
+        payload.put("message", message);
+        payload.put("status", status.value());
+        payload.put("correlationId", correlationId);
+
+        byte[] bytes;
+        try {
+            bytes = ERROR_OBJECT_MAPPER.writeValueAsBytes(payload);
+        } catch (Exception serializationEx) {
+            String fallbackJson = String.format(
+                    "{\"error\":\"%s\",\"message\":\"%s\",\"status\":%d,\"correlationId\":\"%s\"}",
+                    status.getReasonPhrase(), message, status.value(), correlationId);
+            bytes = fallbackJson.getBytes(StandardCharsets.UTF_8);
+        }
+        DataBuffer buffer = response.bufferFactory().wrap(bytes);
         return response.writeWith(Mono.just(buffer));
     }
 

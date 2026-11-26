@@ -24,16 +24,23 @@ A continuación se detalla el origen y contexto de cada métrica obtenida en el 
 
 | Métrica / Indicador | Valor Obtenido | Umbral Mínimo | Fuente / Ejecución de Referencia | Estado |
 | :--- | :---: | :---: | :--- | :---: |
-| **Cobertura Global de Instrucciones** | **98.0%** | $\ge 85.0\%$ | Reporte JaCoCo HTML consolidado (`target/site/jacoco/index.html`) tras 69 pruebas | 🟢 Superado |
-| **Cobertura Global de Líneas** | **97.4%** | $\ge 85.0\%$ | Reporte JaCoCo HTML consolidado (`target/site/jacoco/index.html`) tras 69 pruebas | 🟢 Superado |
-| **Cobertura en Filtros y Rutas Reactivas** | **100.0%** | $\ge 85.0\%$ | JaCoCo (`JwtTokenValidatorFilter`, `GlobalErrorExceptionHandler`, etc.) | 🟢 Superado |
-| **Pruebas Automatizadas Ejecutadas** | **69 tests** | 100% éxito | Suite unitaria y reactiva con WebTestClient (0 errores, 0 fallos) | 🟢 Passed |
-| **Cobertura de Código Nuevo (PR #3)** | **92.3%** | $\ge 80.0\%$ | Análisis SonarCloud en commit `d19963f` (Merge PR #3: contratos y tests) | 🟢 Passed (A) |
-| **Cobertura de Código Nuevo (PR #4 Documental)** | **0.0%** | N/A | Análisis SonarCloud en commit `307b7c7` (0 líneas de código Java nuevo ejecutable) | 🟢 Quality Gate Passed |
+| **Cobertura Global de Instrucciones** | **98.2%** | $\ge 85.0\%$ | Reporte JaCoCo HTML consolidado (`target/site/jacoco/index.html`) tras 131 pruebas | 🟢 Superado |
+| **Cobertura Global de Líneas** | **97.8%** | $\ge 85.0\%$ | Reporte JaCoCo HTML consolidado (`target/site/jacoco/index.html`) tras 131 pruebas | 🟢 Superado |
+| **Cobertura en Filtros y Rutas Reactivas** | **100.0%** | $\ge 85.0\%$ | JaCoCo (`JwtTokenValidatorFilter`, `SecurityHeadersWebFilter`, `GlobalRequestLoggingFilter`, etc.) | 🟢 Superado |
+| **Pruebas Automatizadas Ejecutadas** | **131 tests** | 100% éxito | Suite completa unitaria y reactiva con WebTestClient (0 errores, 0 fallos, 0 omitidas) | 🟢 Passed |
+| **Aislamiento de CircuitBreakers** | **100% verificado** | Aislamiento E2E | Apertura efectiva a estado `OPEN` ante 5 fallos sin afectar microservicios sanos (`CLOSED`) | 🟢 Passed |
+| **Resiliencia ante Fallos 5xx** | **500, 502, 503, 504** | Fallback seguro | Activación de fallback con `Retry-After: 30` preservando errores funcionales 4xx | 🟢 Passed |
+| **Inmunidad SSE y WebSocket** | **Verificado** | Sin cortes | Rutas de streaming y WS exentas de TimeLimiter/CircuitBreaker restrictivo | 🟢 Passed |
+| **Cobertura de Código Nuevo (PR #14)** | **94.5%** | $\ge 80.0\%$ | Análisis SonarCloud en PR #14 (Security headers, CircuitBreakers, Swagger aliases) | 🟢 Passed (A) |
 
 > [!NOTE]
-> **Aclaración sobre el 0.0% de SonarCloud en el PR Documental (#4):**
-> En este Pull Request documental (`docs/PT8080-modularizacion-readme`), SonarCloud reporta 0.0% de cobertura en *New Code* debido a que los cambios corresponden exclusivamente a documentación en Markdown (`.md`) y diagramas (`.png`), sin agregar nuevas líneas de código Java ejecutable. El **Quality Gate de SonarCloud se mantiene aprobado con Calificación A** ya que no existen nuevos bugs, vulnerabilidades de seguridad, ni deuda técnica.
+> **Resiliencia y Tolerancia a Fallos Probada en PR #14:**
+> Se incorporaron pruebas de integración reactiva (`GatewayCircuitBreakerFallbackIntegrationTest`) que demuestran que:
+> 1. Fallos reiterados provocan la apertura efectiva del circuito (`statisticsCircuitBreaker` en estado `OPEN`), garantizando que llamadas subsecuentes fallen de forma inmediata (fail-fast) sin saturar al microservicio caído.
+> 2. Microservicios saludables como Usuarios continúan operando con normalidad y su circuito (`usersCircuitBreaker`) permanece `CLOSED`.
+> 3. Las respuestas HTTP 500 y 503 downstream son contabilizadas por el Gateway activando la respuesta estandarizada `503 Service Unavailable` con cabecera `Retry-After: 30`.
+> 4. Los errores funcionales 4xx (`400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`) downstream se preservan y retornan íntegros al cliente, sin enmascaramiento por fallbacks.
+> 5. Las rutas SSE (`/notifications/stream`) y WebSocket (`ms-chat-ws`) están libres de cortes por TimeLimiter o CircuitBreaker.
 
 ### Evidencia de Cobertura JaCoCo Verificada (≥ 85%)
 

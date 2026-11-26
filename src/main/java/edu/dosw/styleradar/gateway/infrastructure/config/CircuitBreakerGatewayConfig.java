@@ -12,23 +12,33 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 /**
- * Configura el TimeLimiter global de los CircuitBreakers reactivos del Gateway
- * para evitar cortes prematuros (1s por defecto) en operaciones de Azure Blob Storage
- * o arranques en frío de microservicios como Try-On y Donaciones.
+ * Configura los CircuitBreakers reactivos y TimeLimiters del Gateway para tolerancia a fallos,
+ * aislamiento entre microservicios, soporte ante arranques en frío y detección de errores 5xx.
  */
 @Configuration
 public class CircuitBreakerGatewayConfig {
 
     @Bean
     public Customizer<ReactiveResilience4JCircuitBreakerFactory> defaultCircuitBreakerCustomizer(
-            @Value("${styleradar.gateway.circuit-breaker.timeout-seconds:30}") long timeoutSeconds
+            @Value("${styleradar.gateway.circuit-breaker.timeout-seconds:30}") long timeoutSeconds,
+            @Value("${styleradar.gateway.circuit-breaker.sliding-window-size:10}") int slidingWindowSize,
+            @Value("${styleradar.gateway.circuit-breaker.minimum-number-of-calls:5}") int minimumNumberOfCalls,
+            @Value("${styleradar.gateway.circuit-breaker.failure-rate-threshold:50.0}") float failureRateThreshold,
+            @Value("${styleradar.gateway.circuit-breaker.wait-duration-open-seconds:10}") long waitDurationOpenSeconds
     ) {
         Duration timeout = Duration.ofSeconds(Math.max(1L, timeoutSeconds));
         return factory -> factory.configureDefault(id -> new Resilience4JConfigBuilder(id)
-                .circuitBreakerConfig(CircuitBreakerConfig.ofDefaults())
+                .circuitBreakerConfig(CircuitBreakerConfig.custom()
+                        .slidingWindowSize(Math.max(1, slidingWindowSize))
+                        .minimumNumberOfCalls(Math.max(1, minimumNumberOfCalls))
+                        .failureRateThreshold(Math.max(1.0f, failureRateThreshold))
+                        .waitDurationInOpenState(Duration.ofSeconds(Math.max(1L, waitDurationOpenSeconds)))
+                        .permittedNumberOfCallsInHalfOpenState(3)
+                        .build())
                 .timeLimiterConfig(TimeLimiterConfig.custom()
                         .timeoutDuration(timeout)
                         .build())
                 .build());
     }
 }
+

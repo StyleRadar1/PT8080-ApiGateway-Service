@@ -47,17 +47,19 @@ spring:
               - "WWW-Authenticate"
               - "Location"
               - "Content-Disposition"
+              - "X-Correlation-Id"
+              - "X-Request-Id"
             allowCredentials: true
             maxAge: 3600
       routes:
         # ==============================================================
         # 1. Enrutamiento y agregación de especificaciones OpenAPI / Swagger
         # ==============================================================
-        # Swagger Probador Virtual (transforma /v3/api-docs/probador -> /v3/api-docs en :8500)
+        # Swagger Probador Virtual (transforma /v3/api-docs/probador o /try-on -> /v3/api-docs en :8500)
         - id: ms-probador-virtual-swagger
           uri: ${TRYON_SERVICE_URL:${PROBADOR_SERVICE_URL:http://localhost:8500}}
           predicates:
-            - Path=/v3/api-docs/probador
+            - Path=/v3/api-docs/probador, /v3/api-docs/try-on
           filters:
             - SetPath=/v3/api-docs
 
@@ -109,11 +111,11 @@ spring:
           filters:
             - SetPath=/v3/api-docs
 
-        # Swagger Pagos y Suscripciones (transforma /v3/api-docs/pagos -> /v3/api-docs en :8400)
+        # Swagger Pagos y Suscripciones (transforma /v3/api-docs/pagos o /payments -> /v3/api-docs en :8400)
         - id: ms-pagos-swagger
           uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
           predicates:
-            - Path=/v3/api-docs/pagos
+            - Path=/v3/api-docs/pagos, /v3/api-docs/payments
           filters:
             - SetPath=/v3/api-docs
 
@@ -122,6 +124,38 @@ spring:
           uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8420}
           predicates:
             - Path=/v3/api-docs/statistics, /v3/api-docs/estadisticas
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
+        # Swagger Inventario (transforma /v3/api-docs/inventario o /inventory -> /api/v1/v3/api-docs en :8200)
+        - id: ms-inventario-swagger
+          uri: ${INVENTARIO_SERVICE_URL:http://localhost:8200}
+          predicates:
+            - Path=/v3/api-docs/inventario, /v3/api-docs/inventory
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
+        # Swagger Catálogo (transforma /v3/api-docs/catalogo o /catalog -> /api/v1/v3/api-docs en :8220)
+        - id: ms-catalogo-swagger
+          uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
+          predicates:
+            - Path=/v3/api-docs/catalogo, /v3/api-docs/catalog
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
+        # Swagger Geolocalización (transforma /v3/api-docs/geolocalizacion o /geolocation -> /api/v1/v3/api-docs en :8240)
+        - id: ms-geolocalizacion-swagger
+          uri: ${GEOLOCALIZACION_SERVICE_URL:http://localhost:8240}
+          predicates:
+            - Path=/v3/api-docs/geolocalizacion, /v3/api-docs/geolocation
+          filters:
+            - SetPath=/api/v1/v3/api-docs
+
+        # Swagger Playlist (transforma /v3/api-docs/playlist o /playlists -> /api/v1/v3/api-docs en :8260)
+        - id: ms-playlist-swagger
+          uri: ${PLAYLIST_SERVICE_URL:http://localhost:8260}
+          predicates:
+            - Path=/v3/api-docs/playlist, /v3/api-docs/playlists
           filters:
             - SetPath=/api/v1/v3/api-docs
 
@@ -135,6 +169,16 @@ spring:
           uri: ${AUTH_SERVICE_URL:http://localhost:8100}
           predicates:
             - Path=/api/v1/auth/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: authCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # Rutas especificas de almacenes con prioridad sobre la ruta general de Tiendas
         - id: ms-geolocalizacion-almacenes
@@ -143,6 +187,16 @@ spring:
           predicates:
             - Method=GET
             - Path=/api/v1/stores/nearby, /api/v1/stores/{id}/distance, /api/v1/foundations/nearby, /api/v1/almacenes, /api/v1/almacenes/{id}/distancia, /api/v1/fundaciones/cercanas
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: geolocationCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-item-catalogo-almacenes
           order: -2
@@ -150,12 +204,32 @@ spring:
           predicates:
             - Method=GET
             - Path=/api/v1/stores/{id}/catalog, /api/v1/stores/{id}/catalog/summary, /api/v1/stores/{id}/new-arrivals, /api/v1/almacenes/{id}/catalogo, /api/v1/almacenes/{id}/catalogo/resumen, /api/v1/almacenes/{id}/novedades
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: catalogoCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
         # ms-chat-conversations: rutas de conversaciones bajo users/stores/donations/publications (prioridad -2)
         - id: ms-chat-conversations
           order: -2
           uri: ${CHAT_SERVICE_URL:http://localhost:8320}
           predicates:
             - Path=/api/v1/users/conversations, /api/v1/users/{userId}/conversations, /api/v1/stores/conversations, /api/v1/stores/{nit}/conversations, /api/v1/donations/{donationId}/conversations, /api/v1/second-hand/publications/{publicationId}/conversations
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: chatCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-tiendas: Registro y Gestión de Almacenes Aliados y Fundaciones (Puerto 8140)
         - id: ms-tiendas
@@ -163,12 +237,32 @@ spring:
           uri: ${TIENDAS_SERVICE_URL:http://localhost:8140}
           predicates:
             - Path=/api/v1/stores, /api/v1/stores/**, /api/v1/foundations, /api/v1/foundations/**, /api/v1/users/*/store, /api/v1/admin/stores, /api/v1/admin/stores/**, /api/v1/admin/foundations, /api/v1/admin/foundations/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: storesCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-usuarios: Gestión de Usuarios y Perfiles (Puerto 8120)
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:http://localhost:8120}
           predicates:
             - Path=/api/v1/users, /api/v1/users/**, /api/v1/admin/users, /api/v1/admin/users/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: usersCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # --- PAQUETE 2: CATÁLOGO (RESTrepo · Bloque 8200) ---
         # ms-inventario: Inventario por Talla (Puerto 8200)
@@ -176,32 +270,89 @@ spring:
           uri: ${INVENTARIO_SERVICE_URL:http://localhost:8200}
           predicates:
             - Path=/api/v1/inventory, /api/v1/inventory/**, /api/v1/inventario, /api/v1/inventario/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: inventoryCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-item-catalogo: Catálogo de Prendas y Búsqueda (Puerto 8220)
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:http://localhost:8220}
           predicates:
             - Path=/api/v1/garments, /api/v1/garments/**, /api/v1/prendas, /api/v1/prendas/**, /api/v1/catalogo/items/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: catalogoCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-playlist: Listas de Prendas y Outfits (Puerto 8260)
         - id: ms-playlist
           uri: ${PLAYLIST_SERVICE_URL:http://localhost:8260}
           predicates:
             - Path=/api/v1/playlists, /api/v1/playlists/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: playlistCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # --- PAQUETE 3: MENSAJERÍA Y CHAT (Guatoque · Bloque 8300) ---
+        # ms-notificaciones-stream: Server-Sent Events (SSE) en tiempo real sin TimeLimiter/CircuitBreaker restrictivo
+        - id: ms-notificaciones-stream
+          order: -2
+          uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
+          predicates:
+            - Path=/api/v1/users/*/notifications/stream, /api/v1/users/*/alerts/stream
+
         # ms-notificaciones: Alertas y Notificaciones Push/Email (Puerto 8300)
         - id: ms-notificaciones
           order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
           predicates:
             - Path=/api/v1/users/*/notifications, /api/v1/users/*/notifications/**, /api/v1/users/*/alerts, /api/v1/users/*/alerts/**, /api/v1/users/*/notification-preferences, /api/v1/users/*/notification-preferences/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: notificationsCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-chat: Operaciones REST de Chat en Vivo y Mensajería (Puerto 8320)
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:http://localhost:8320}
           predicates:
             - Path=/api/v1/conversations, /api/v1/conversations/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: chatCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-chat-ws: Enrutamiento WebSocket en Tiempo Real con esquema ws:// (Puerto 8320)
         - id: ms-chat-ws
@@ -216,12 +367,32 @@ spring:
           uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
           predicates:
             - Path=/api/v1/plans, /api/v1/plans/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/webhooks/mercadopago
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: paymentsCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8420}
           predicates:
-            - Path=/api/v1/statistics/**
+            - Path=/api/v1/statistics, /api/v1/statistics/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: statisticsCircuitBreaker
+                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # --- PAQUETE 5: EXPERIENCIA, DONACIONES Y PROBADOR (Portal 8080 · Bloque 8500) ---
         # ms-probador-virtual: Probador Virtual con IA FASHN VTON (Puerto 8500)
@@ -234,6 +405,11 @@ spring:
               args:
                 name: tryonCircuitBreaker
                 fallbackUri: forward:/fallback/probador
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-segunda-vida-donaciones: Donaciones y Moda Sostenible (Puerto 8520)
         - id: ms-segunda-vida-donaciones
@@ -245,6 +421,11 @@ spring:
               args:
                 name: donacionesCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
 # Configuración de Actuator & Métricas (CVE-2025-41243 mitigado: endpoint gateway deshabilitado)
 management:
@@ -286,6 +467,14 @@ springdoc:
         url: "/v3/api-docs/notificaciones"
       - name: "ms-usuarios (:8120)"
         url: "/v3/api-docs/usuarios"
+      - name: "ms-inventario (:8200)"
+        url: "/v3/api-docs/inventario"
+      - name: "ms-item-catalogo (:8220)"
+        url: "/v3/api-docs/catalogo"
+      - name: "ms-geolocalizacion (:8240)"
+        url: "/v3/api-docs/geolocalizacion"
+      - name: "ms-playlist (:8260)"
+        url: "/v3/api-docs/playlist"
       - name: "ms-chat (:8320)"
         url: "/v3/api-docs/chat"
       - name: "ms-pagos-suscripciones (:8400)"
@@ -304,3 +493,7 @@ styleradar:
     trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:}
     circuit-breaker:
       timeout-seconds: ${GATEWAY_CIRCUIT_BREAKER_TIMEOUT_SECONDS:30}
+      sliding-window-size: ${GATEWAY_CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE:10}
+      minimum-number-of-calls: ${GATEWAY_CIRCUIT_BREAKER_MIN_CALLS:5}
+      failure-rate-threshold: ${GATEWAY_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD:50.0}
+      wait-duration-open-seconds: ${GATEWAY_CIRCUIT_BREAKER_WAIT_DURATION_OPEN_SECONDS:10}

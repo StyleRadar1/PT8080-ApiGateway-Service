@@ -62,3 +62,16 @@
 10. [Ramas y cómo contribuir](docs/secciones/10-ramas-y-como-contribuir.md)
 11. [Seguridad y análisis OWASP Top 10:2025](docs/secciones/11-seguridad-y-owasp.md)
 12. [Equipo, responsables y enlace a la épica en Jira](docs/secciones/12-equipo-responsables-y-epica-jira.md)
+
+---
+
+## 13. Remediación Integral de PR #14 (Resolución Exhaustiva Feedback Líder Técnico)
+
+Tras la revisión técnica del commit `a8595a4` en el PR #14, se subsanaron los puntos finales solicitados por el líder de equipo:
+
+1. **Eliminación de Rutas Duplicadas y Unicidad de Identificadores:** Se eliminaron los bloques residuales duplicados de `ms-pagos-suscripciones` y `ms-estadisticas` que utilizaban `generalCircuitBreaker` en `application.yml`. Se certificó la unicidad de IDs de rutas en todos los entornos (`DEV`, `QA`, `PROD`).
+2. **Apertura Efectiva del Circuito y Aislamiento Demostrado:** La prueba de integración en `GatewayCircuitBreakerFallbackIntegrationTest` ahora provoca 5 fallos consecutivos (alcanzando `minimumNumberOfCalls` y tasa de fallos del 100%), verificando la transición real a `CircuitBreaker.State.OPEN` en `statisticsCircuitBreaker` y fail-fast en llamadas posteriores. Al mismo tiempo, se comprueba que el microservicio de Usuarios (`usersCircuitBreaker`) permanece en `CircuitBreaker.State.CLOSED` respondiendo `200 OK` sin degradación.
+3. **Contabilización de Errores HTTP 5xx y Preservación de 4xx:** Se configuraron explícitamente los códigos de error HTTP del servidor (`statusCodes: [500, 502, 503, 504]`) en todos los CircuitBreakers reactivos. Se implementaron pruebas automatizadas que certifican que respuestas 500 y 503 downstream activan el fallback estandarizado `503 Service Unavailable` con `Retry-After: 30`, mientras que los errores funcionales 4xx (`400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`) fluyen downstream intactos hacia el cliente sin intercepción.
+4. **Resiliencia ante Timeouts por TimeLimiter:** Se validó que llamadas lentas downstream que superan el límite de tiempo (`timeoutDuration`) disparan controladamente el fallback con `503 Service Unavailable` y `Retry-After: 30`.
+5. **Inmunidad de Rutas Streaming SSE y WebSocket:** Se añadió prueba automatizada validando en `RouteLocator` que las rutas `ms-notificaciones-stream` (`/api/v1/users/*/notifications/stream`) y `ms-chat-ws` (`/api/v1/ws/**`) están libres de filtros de `CircuitBreaker` o `TimeLimiter`, garantizando la persistencia indefinida de conexiones bidireccionales y flujos de eventos.
+6. **Métricas de Calidad y Suite CI/CD:** La suite completa de pruebas asciende ahora a **131 pruebas automatizadas aprobadas** (0 fallos, 0 errores, 0 omitidas), con Quality Gate de SonarCloud y JaCoCo ≥ 85% superado ampliamente.

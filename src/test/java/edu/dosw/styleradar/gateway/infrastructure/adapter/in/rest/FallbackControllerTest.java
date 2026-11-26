@@ -31,6 +31,7 @@ class FallbackControllerTest {
                     .uri("/fallback/probador")
                     .exchange()
                     .expectStatus().is5xxServerError()
+                    .expectHeader().valueEquals(org.springframework.http.HttpHeaders.RETRY_AFTER, "30")
                     .expectBody()
                     .jsonPath("$.status").isEqualTo(503)
                     .jsonPath("$.error").isEqualTo("Servicio No Disponible")
@@ -45,6 +46,7 @@ class FallbackControllerTest {
                     .uri("/fallback/general")
                     .exchange()
                     .expectStatus().is5xxServerError()
+                    .expectHeader().valueEquals(org.springframework.http.HttpHeaders.RETRY_AFTER, "30")
                     .expectBody()
                     .jsonPath("$.status").isEqualTo(503)
                     .jsonPath("$.error").isEqualTo("Microservicio No Disponible");
