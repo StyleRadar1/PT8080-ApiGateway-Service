@@ -174,6 +174,11 @@ spring:
               args:
                 name: authCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # Rutas especificas de almacenes con prioridad sobre la ruta general de Tiendas
         - id: ms-geolocalizacion-almacenes
@@ -187,6 +192,11 @@ spring:
               args:
                 name: geolocationCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-item-catalogo-almacenes
           order: -2
@@ -199,6 +209,11 @@ spring:
               args:
                 name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
         # ms-chat-conversations: rutas de conversaciones bajo users/stores/donations/publications (prioridad -2)
         - id: ms-chat-conversations
           order: -2
@@ -210,6 +225,11 @@ spring:
               args:
                 name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-tiendas: Registro y Gestión de Almacenes Aliados y Fundaciones (Puerto 8140)
         - id: ms-tiendas
@@ -222,6 +242,11 @@ spring:
               args:
                 name: storesCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-usuarios: Gestión de Usuarios y Perfiles (Puerto 8120)
         - id: ms-usuarios
@@ -233,6 +258,11 @@ spring:
               args:
                 name: usersCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # --- PAQUETE 2: CATÁLOGO (RESTrepo · Bloque 8200) ---
         # ms-inventario: Inventario por Talla (Puerto 8200)
@@ -245,6 +275,11 @@ spring:
               args:
                 name: inventoryCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-item-catalogo: Catálogo de Prendas y Búsqueda (Puerto 8220)
         - id: ms-item-catalogo
@@ -256,6 +291,11 @@ spring:
               args:
                 name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-playlist: Listas de Prendas y Outfits (Puerto 8260)
         - id: ms-playlist
@@ -267,6 +307,11 @@ spring:
               args:
                 name: playlistCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # --- PAQUETE 3: MENSAJERÍA Y CHAT (Guatoque · Bloque 8300) ---
         # ms-notificaciones-stream: Server-Sent Events (SSE) en tiempo real sin TimeLimiter/CircuitBreaker restrictivo
@@ -287,6 +332,11 @@ spring:
               args:
                 name: notificationsCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-chat: Operaciones REST de Chat en Vivo y Mensajería (Puerto 8320)
         - id: ms-chat
@@ -298,6 +348,11 @@ spring:
               args:
                 name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-chat-ws: Enrutamiento WebSocket en Tiempo Real con esquema ws:// (Puerto 8320)
         - id: ms-chat-ws
@@ -317,6 +372,11 @@ spring:
               args:
                 name: paymentsCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
         - id: ms-estadisticas
@@ -328,27 +388,11 @@ spring:
               args:
                 name: statisticsCircuitBreaker
                 fallbackUri: forward:/fallback/general
-        - id: ms-pagos-suscripciones
-          order: -1
-          uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
-          predicates:
-            - Path=/api/v1/plans, /api/v1/plans/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/webhooks/mercadopago
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: generalCircuitBreaker
-                fallbackUri: forward:/fallback/general
-
-        # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
-        - id: ms-estadisticas
-          uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8420}
-          predicates:
-            - Path=/api/v1/statistics, /api/v1/statistics/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: generalCircuitBreaker
-                fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # --- PAQUETE 5: EXPERIENCIA, DONACIONES Y PROBADOR (Portal 8080 · Bloque 8500) ---
         # ms-probador-virtual: Probador Virtual con IA FASHN VTON (Puerto 8500)
@@ -361,6 +405,11 @@ spring:
               args:
                 name: tryonCircuitBreaker
                 fallbackUri: forward:/fallback/probador
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-segunda-vida-donaciones: Donaciones y Moda Sostenible (Puerto 8520)
         - id: ms-segunda-vida-donaciones
@@ -372,6 +421,11 @@ spring:
               args:
                 name: donacionesCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
 # Configuración de Actuator & Métricas (CVE-2025-41243 mitigado: endpoint gateway deshabilitado)
 management:
@@ -439,3 +493,7 @@ styleradar:
     trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:}
     circuit-breaker:
       timeout-seconds: ${GATEWAY_CIRCUIT_BREAKER_TIMEOUT_SECONDS:30}
+      sliding-window-size: ${GATEWAY_CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE:10}
+      minimum-number-of-calls: ${GATEWAY_CIRCUIT_BREAKER_MIN_CALLS:5}
+      failure-rate-threshold: ${GATEWAY_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD:50.0}
+      wait-duration-open-seconds: ${GATEWAY_CIRCUIT_BREAKER_WAIT_DURATION_OPEN_SECONDS:10}

@@ -144,6 +144,11 @@ spring:
               args:
                 name: authCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # Rutas especificas de almacenes con prioridad sobre la ruta general de Tiendas
         - id: ms-geolocalizacion-almacenes
@@ -157,6 +162,11 @@ spring:
               args:
                 name: geolocationCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-item-catalogo-almacenes
           order: -2
@@ -169,6 +179,11 @@ spring:
               args:
                 name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
         - id: ms-chat-conversations
           order: -2
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
@@ -179,6 +194,11 @@ spring:
               args:
                 name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-tiendas
           order: -1
@@ -190,6 +210,11 @@ spring:
               args:
                 name: storesCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-usuarios
           uri: ${USUARIOS_SERVICE_URL:https://styleradar-prod-app.azurewebsites.net}
@@ -200,6 +225,11 @@ spring:
               args:
                 name: usersCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # Paquete 2: Catálogo (RESTrepo · Azure Container Apps)
         - id: ms-inventario
@@ -211,6 +241,11 @@ spring:
               args:
                 name: inventoryCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-item-catalogo
           uri: ${CATALOGO_SERVICE_URL:https://rst-itemcatalog-service-prod.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
@@ -221,6 +256,11 @@ spring:
               args:
                 name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # ms-playlist
         - id: ms-playlist
@@ -232,6 +272,11 @@ spring:
               args:
                 name: playlistCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # Paquete 3: Mensajería
         # ms-notificaciones-stream: Server-Sent Events (SSE) en tiempo real sin TimeLimiter/CircuitBreaker restrictivo
@@ -251,6 +296,11 @@ spring:
               args:
                 name: notificationsCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-chat
           uri: ${CHAT_SERVICE_URL:https://gj-chat-service-prod-santi.azurewebsites.net}
@@ -261,6 +311,11 @@ spring:
               args:
                 name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-chat-ws
           uri: ${CHAT_WS_SERVICE_URL:wss://gj-chat-service-prod-santi.azurewebsites.net}
@@ -278,6 +333,11 @@ spring:
               args:
                 name: paymentsCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-estadisticas
           uri: ${ESTADISTICAS_SERVICE_URL:https://sr-ms-estadisticas-prod.azurewebsites.net}
@@ -288,6 +348,11 @@ spring:
               args:
                 name: statisticsCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         # Paquete 5: Experiencia y Donaciones
         - id: ms-probador-virtual
@@ -299,6 +364,11 @@ spring:
               args:
                 name: tryonCircuitBreaker
                 fallbackUri: forward:/fallback/probador
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
         - id: ms-segunda-vida-donaciones
           uri: ${DONACIONES_SERVICE_URL:https://styleradar-donaciones-prod-jmunar.azurewebsites.net}
@@ -309,6 +379,11 @@ spring:
               args:
                 name: donacionesCircuitBreaker
                 fallbackUri: forward:/fallback/general
+                statusCodes:
+                  - 500
+                  - 502
+                  - 503
+                  - 504
 
 management:
   endpoints:
@@ -330,3 +405,9 @@ logging:
 styleradar:
   gateway:
     trusted-proxies: ${GATEWAY_TRUSTED_PROXIES:169.254.0.0/16,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1}
+    circuit-breaker:
+      timeout-seconds: ${GATEWAY_CIRCUIT_BREAKER_TIMEOUT_SECONDS:30}
+      sliding-window-size: ${GATEWAY_CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE:10}
+      minimum-number-of-calls: ${GATEWAY_CIRCUIT_BREAKER_MIN_CALLS:5}
+      failure-rate-threshold: ${GATEWAY_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD:50.0}
+      wait-duration-open-seconds: ${GATEWAY_CIRCUIT_BREAKER_WAIT_DURATION_OPEN_SECONDS:10}

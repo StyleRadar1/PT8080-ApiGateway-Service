@@ -40,6 +40,17 @@ Las URLs de destino difieren según el entorno de ejecución del API Gateway. Cu
 | `CHAT_WS_SERVICE_URL` | `ms-chat` (WebSocket) | `ws://localhost:8320` | `ws://ms-chat:8320` | ⚠️ *Sugerido · Requiere configuración explícita* |
 | `ESTADISTICAS_SERVICE_URL` | `ms-estadisticas` | `http://localhost:8420` | `http://ms-estadisticas:8420` | ⚠️ *Sugerido · Requiere configuración explícita* |
 
+#### 3. Variables de Resiliencia, CircuitBreaker y Red Confiable
+
+| Variable de Entorno | Propósito / Configuración | Valor por Defecto | Impacto Operativo |
+| :--- | :--- | :---: | :--- |
+| `GATEWAY_CIRCUIT_BREAKER_TIMEOUT_SECONDS` | Tiempo límite antes de corte por TimeLimiter | `30` | Previene cortes prematuros ante arranques en frío |
+| `GATEWAY_CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE` | Tamaño de ventana deslizante de llamadas | `10` | Muestreo para cálculo de tasa de fallos |
+| `GATEWAY_CIRCUIT_BREAKER_MIN_CALLS` | Llamadas mínimas antes de evaluar apertura | `5` | Número mínimo de intentos para abrir el circuito |
+| `GATEWAY_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD`| Porcentaje umbral de fallos para abrir circuito | `50.0` | Porcentaje de fallos (ej. 50%) para transición a OPEN |
+| `GATEWAY_CIRCUIT_BREAKER_WAIT_DURATION_OPEN_SECONDS` | Tiempo de espera en estado OPEN antes de half-open | `10` | Ventana de enfriamiento antes de reintentar llamadas |
+| `GATEWAY_TRUSTED_PROXIES` | Lista CIDR de proxies inversos confiables | Redes privadas RFC1918 | Validación de cabecera `X-Forwarded-For` perimetral |
+
 ### Cómo Pasar Variables hacia el Contenedor Docker
 
 > [!WARNING]
