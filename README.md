@@ -62,3 +62,17 @@
 10. [Ramas y cómo contribuir](docs/secciones/10-ramas-y-como-contribuir.md)
 11. [Seguridad y análisis OWASP Top 10:2025](docs/secciones/11-seguridad-y-owasp.md)
 12. [Equipo, responsables y enlace a la épica en Jira](docs/secciones/12-equipo-responsables-y-epica-jira.md)
+
+---
+
+## 13. Remediación Integral de PR #14 (Resolución Exhaustiva Feedback Líder Técnico)
+
+Tras la revisión técnica del commit `c70e838` en el PR #14, se subsanaron los 7 puntos solicitados por el líder de equipo:
+
+1. **CircuitBreakers Independientes por Microservicio:** Se eliminó la compartición del circuito `generalCircuitBreaker`. Cada ruta de microservicio cuenta ahora con su propia instancia aislada (`authCircuitBreaker`, `storesCircuitBreaker`, `usersCircuitBreaker`, `catalogoCircuitBreaker`, `inventoryCircuitBreaker`, `geolocationCircuitBreaker`, `playlistCircuitBreaker`, `notificationsCircuitBreaker`, `chatCircuitBreaker`, `paymentsCircuitBreaker`, `statisticsCircuitBreaker`, `tryonCircuitBreaker`, `donacionesCircuitBreaker`). Se añadió prueba de integración que comprueba que la caída de un servicio no afecta el tráfico ni el estado de los demás circuitos.
+2. **Swagger de Inventario (`RST-Inventory-Service` PR #42):** Se sincronizó la reescritura interna a `SetPath=/api/v1/v3/api-docs` en los tres ambientes (`DEV`, `QA`, `PROD`) y se actualizó la prueba de integración contra el prefijo real del microservicio de Inventario.
+3. **Cabecera `Retry-After: 30` en Fallbacks:** `FallbackController` inyecta ahora la cabecera estándar `Retry-After: 30` en todas las respuestas `503 Service Unavailable`, garantizando que los errores funcionales 4xx (`400`, `401`, `403`, `404`) sigan fluyendo downstream sin interceptación hacia el fallback.
+4. **Content-Security-Policy (BUG-011) y Protección Perimetral:** Se configuró CSP perimetral estricto (`default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`) para APIs y CSP adaptado para Swagger UI (`default-src 'self'; script-src 'self' 'unsafe-inline'; ...; frame-ancestors 'self'`) junto con `X-Frame-Options: SAMEORIGIN` (Swagger) y `DENY` (APIs). Se aplica mediante `headers.set(...)` para evitar que respuestas downstream debiliten las políticas de seguridad.
+5. **Observabilidad, CORS y Compatibilidad SSE / WebSocket:** Se agregaron `X-Correlation-Id` y `X-Request-Id` a `exposedHeaders` en CORS. Se garantizó que SSE (`/api/v1/users/*/notifications/stream`) y WebSocket (`ms-chat-ws`) no sufran cortes por TimeLimiter o CircuitBreaker de 30 segundos.
+6. **Aislamiento de Identidad Organizacional (BUG-005):** El Gateway extrae `storeId` y `foundationId` exclusivamente desde claims firmados de tokens JWT sin realizar ningún fallback a `sub` (subject del JWT). Se registró la nota de coordinación con NQS (Pagos y Estadísticas) para unificar esta regla downstream.
+7. **Documentación Sincronizada:** Se actualizaron las secciones técnicas de endpoints, contratos, variables de entorno, pruebas unitarias e integración en `docs/secciones/`.

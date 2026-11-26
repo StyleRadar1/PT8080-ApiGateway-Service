@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 
 /**
  * Filtro reactivo perimetral que inyecta cabeceras de seguridad HTTP estándar en las respuestas del API Gateway
- * sin interferir con la negociación CORS ni con la renderización de Swagger UI.
+ * garantizando la política perimetral (BUG-011) sin debilitamiento por cabeceras downstream y compatibilidad con Swagger UI.
  */
 @Component
 public class SecurityHeadersWebFilter implements WebFilter, Ordered {
@@ -20,12 +20,16 @@ public class SecurityHeadersWebFilter implements WebFilter, Ordered {
     public static final String X_FRAME_OPTIONS = "X-Frame-Options";
     public static final String REFERRER_POLICY = "Referrer-Policy";
     public static final String PERMISSIONS_POLICY = "Permissions-Policy";
+    public static final String CONTENT_SECURITY_POLICY = "Content-Security-Policy";
 
     private static final String HSTS_VALUE = "max-age=31536000; includeSubDomains";
     private static final String CONTENT_TYPE_OPTIONS_VALUE = "nosniff";
-    private static final String FRAME_OPTIONS_VALUE = "DENY";
+    private static final String FRAME_OPTIONS_DENY = "DENY";
+    private static final String FRAME_OPTIONS_SAMEORIGIN = "SAMEORIGIN";
     private static final String REFERRER_POLICY_VALUE = "strict-origin-when-cross-origin";
     private static final String PERMISSIONS_POLICY_VALUE = "camera=(), microphone=(), geolocation=(self)";
+    public static final String API_CSP_VALUE = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+    public static final String SWAGGER_CSP_VALUE = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' data: https:; frame-ancestors 'self'";
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -41,20 +45,34 @@ public class SecurityHeadersWebFilter implements WebFilter, Ordered {
         if (headers == null) {
             return;
         }
-        setIfAbsent(headers, STRICT_TRANSPORT_SECURITY, HSTS_VALUE);
-        setIfAbsent(headers, X_CONTENT_TYPE_OPTIONS, CONTENT_TYPE_OPTIONS_VALUE);
-        setIfAbsent(headers, X_FRAME_OPTIONS, FRAME_OPTIONS_VALUE);
-        setIfAbsent(headers, REFERRER_POLICY, REFERRER_POLICY_VALUE);
-        setIfAbsent(headers, PERMISSIONS_POLICY, PERMISSIONS_POLICY_VALUE);
+        // Las cabeceras perimetrales se fuerzan con headers.set(...) para evitar que
+        // servicios downstream debiliten las directivas de seguridad del API Gateway.
+        headers.set(STRICT_TRANSPORT_SECURITY, HSTS_VALUE);
+        headers.set(X_CONTENT_TYPE_OPTIONS, CONTENT_TYPE_OPTIONS_VALUE);
+        headers.set(REFERRER_POLICY, REFERRER_POLICY_VALUE);
+        headers.set(PERMISSIONS_POLICY, PERMISSIONS_POLICY_VALUE);
+
+        if (isSwaggerPath(path)) {
+            headers.set(X_FRAME_OPTIONS, FRAME_OPTIONS_SAMEORIGIN);
+            headers.set(CONTENT_SECURITY_POLICY, SWAGGER_CSP_VALUE);
+        } else {
+            headers.set(X_FRAME_OPTIONS, FRAME_OPTIONS_DENY);
+            headers.set(CONTENT_SECURITY_POLICY, API_CSP_VALUE);
+        }
+
         if (isAuthEndpoint(path)) {
             headers.set(HttpHeaders.CACHE_CONTROL, "no-store");
         }
     }
 
-    private static void setIfAbsent(HttpHeaders headers, String name, String value) {
-        if (!headers.containsKey(name)) {
-            headers.set(name, value);
+    private static boolean isSwaggerPath(String path) {
+        if (path == null) {
+            return false;
         }
+        return path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs")
+                || path.equals("/swagger-ui.html")
+                || path.startsWith("/webjars/");
     }
 
     private static boolean isAuthEndpoint(String path) {

@@ -23,19 +23,21 @@
 
 | Microservicio | Paquete / Squad | Puerto Oficial | Prefijo de Ruta Expuesto | Circuit Breaker Activo | Host QA (Azure) | Host PROD (Azure) |
 | :--- | :--- | :---: | :--- | :---: | :--- | :--- |
-| `ms-auth` | P1: Identidad | `8100` | `/api/v1/auth/**` | No (Paso directo) | `styleradar-auth-qa` | `styleradar-auth-prod` |
-| `ms-geolocalizacion` | P2: Catálogo | `8240` | `/api/v1/geolocalizacion/**`, `/api/v1/geolocation/**`<br>*(Prioridad `order: -2`)*: `GET /api/v1/almacenes`, `GET /api/v1/almacenes/{id}/distancia`, `GET /api/v1/fundaciones/cercanas` | No (Paso directo) | `styleradar-geolocalizacion-qa` | `styleradar-geolocalizacion-prod` |
-| `ms-item-catalogo` | P2: Catálogo | `8220` | `/api/v1/catalogo/**`, `/api/v1/prendas/**`, `/api/v1/catalog/**`, `/api/v1/items/**`<br>*(Prioridad `order: -2`)*: `GET /api/v1/almacenes/{id}/catalogo`, `GET /api/v1/almacenes/{id}/catalogo/resumen`, `GET /api/v1/almacenes/{id}/novedades` | No (Paso directo) | `styleradar-catalogo-qa` | `styleradar-catalogo-prod` |
-| `ms-tiendas` | P1: Identidad | `8140` | `/api/v1/stores/**`, `/api/v1/foundations/**`, `/api/v1/tiendas/**`, `/api/v1/admin/stores/**`, `/api/v1/admin/foundations/**`<br>*(Precedencia general)*: demás rutas coincidentes con `/api/v1/almacenes/**` | No (Paso directo) | `styleradar-tiendas-qa` | `styleradar-tiendas-prod` |
-| `ms-usuarios` | P1: Identidad | `8120` | `/api/v1/usuarios/**`, `/api/v1/admin/usuarios/**`, `/api/v1/admin/**` | No (Paso directo) | `styleradar-qa-app` | `styleradar-prod-app` |
-| `ms-inventario` | P2: Catálogo | `8200` | `/api/v1/inventario/**`, `/api/v1/inventory/**` | No (Paso directo) | `styleradar-inventario-qa` | `styleradar-inventario-prod` |
-| `ms-playlist` | P2: Catálogo | `8260` | `/api/v1/playlist/**`, `/api/v1/playlists/**` | No (Paso directo) | `styleradar-playlist-qa` | `styleradar-playlist-prod` |
-| `ms-notificaciones` | P3: Mensajería | `8300` | `/api/v1/notificaciones/**`, `/api/v1/notifications/**`, `/api/v1/usuarios/*/notificaciones/**`, `/api/v1/users/*/notifications/**` | No (Paso directo) | `styleradar-notificaciones-qa` | `styleradar-notificaciones-prod` |
-| `ms-chat` | P3: Mensajería | `8320` | **HTTP:** `/api/v1/conversations/**`, `/api/v1/conversaciones/**`, `/api/v1/chat/**`<br>**WebSocket (ms-chat-ws):** `/ws`, `/ws/**`, `/ws-chat`, `/ws-chat/**` (`ws://localhost:8320`) | No (Paso directo) | `gj-chat-service-qa-santi-gxhjccffcxdgbfcj` | `gj-chat-service-prod-santi` |
-| `ms-pagos-suscripciones` | P4: Pagos | `8400` | `/api/v1/pagos/**`, `/api/v1/payments/**`, `/api/v1/subscriptions/**`, `/api/v1/suscripciones/**`, `/api/v1/planes/**`, `/api/v1/webhooks/**`, `/api/v1/admin/pagos/**` | No (Paso directo) | `styleradar-pagos-qa` | `styleradar-pagos-prod` |
-| `ms-estadisticas` | P4: Pagos | `8420` | `/api/v1/estadisticas/**`, `/api/v1/statistics/**`, `/api/v1/analytics/**` | No (Paso directo) | `styleradar-estadisticas-qa` | `styleradar-estadisticas-prod` |
-| `ms-probador-virtual` | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | Sí (`/fallback/probador`) | `styleradar-virtualtryon-qa` | `styleradar-virtualtryon-prod` |
-| `ms-segunda-vida-donaciones` | P5: Experiencia | `8520` | `/api/v1/health`, `/api/v1/donations/**`, `/api/v1/second-hand/**`, `/api/v1/donaciones/**`, `/api/v1/segunda-mano/**` | Sí (`/fallback/general`) | `styleradar-donaciones-qa-jmunar` | `styleradar-donaciones-prod-jmunar` |
+| `ms-auth` | P1: Identidad | `8100` | `/api/v1/auth/**` | `authCircuitBreaker` | `styleradar-auth-qa` | `styleradar-auth-prod` |
+| `ms-geolocalizacion` | P2: Catálogo | `8240` | `/api/v1/geolocalizacion/**`, `/api/v1/geolocation/**`<br>*(Prioridad `order: -2`)*: `GET /api/v1/almacenes`, `GET /api/v1/almacenes/{id}/distancia`, `GET /api/v1/fundaciones/cercanas` | `geolocationCircuitBreaker` | `styleradar-geolocalizacion-qa` | `styleradar-geolocalizacion-prod` |
+| `ms-item-catalogo` | P2: Catálogo | `8220` | `/api/v1/catalogo/**`, `/api/v1/prendas/**`, `/api/v1/catalog/**`, `/api/v1/items/**`<br>*(Prioridad `order: -2`)*: `GET /api/v1/almacenes/{id}/catalogo`, `GET /api/v1/almacenes/{id}/catalogo/resumen`, `GET /api/v1/almacenes/{id}/novedades` | `catalogoCircuitBreaker` | `styleradar-catalogo-qa` | `styleradar-catalogo-prod` |
+| `ms-tiendas` | P1: Identidad | `8140` | `/api/v1/stores/**`, `/api/v1/foundations/**`, `/api/v1/tiendas/**`, `/api/v1/admin/stores/**`, `/api/v1/admin/foundations/**`<br>*(Precedencia general)*: demás rutas coincidentes con `/api/v1/almacenes/**` | `storesCircuitBreaker` | `styleradar-tiendas-qa` | `styleradar-tiendas-prod` |
+| `ms-usuarios` | P1: Identidad | `8120` | `/api/v1/usuarios/**`, `/api/v1/admin/usuarios/**`, `/api/v1/admin/**`, `/api/v1/users/**` | `usersCircuitBreaker` | `styleradar-qa-app` | `styleradar-prod-app` |
+| `ms-inventario` | P2: Catálogo | `8200` | `/api/v1/inventario/**`, `/api/v1/inventory/**` | `inventoryCircuitBreaker` | `styleradar-inventario-qa` | `styleradar-inventario-prod` |
+| `ms-playlist` | P2: Catálogo | `8260` | `/api/v1/playlist/**`, `/api/v1/playlists/**` | `playlistCircuitBreaker` | `styleradar-playlist-qa` | `styleradar-playlist-prod` |
+| `ms-notificaciones-stream` | P3: Mensajería | `8300` | `/api/v1/users/*/notifications/stream`, `/api/v1/users/*/alerts/stream` (SSE, `order: -2`) | No (Streaming SSE sin límite de 30s) | `styleradar-notificaciones-qa` | `styleradar-notificaciones-prod` |
+| `ms-notificaciones` | P3: Mensajería | `8300` | `/api/v1/notificaciones/**`, `/api/v1/notifications/**`, `/api/v1/users/*/notifications/**` | `notificationsCircuitBreaker` | `styleradar-notificaciones-qa` | `styleradar-notificaciones-prod` |
+| `ms-chat` | P3: Mensajería | `8320` | **HTTP:** `/api/v1/conversations/**`, `/api/v1/conversaciones/**`, `/api/v1/chat/**` | `chatCircuitBreaker` | `gj-chat-service-qa-santi-gxhjccffcxdgbfcj` | `gj-chat-service-prod-santi` |
+| `ms-chat-ws` | P3: Mensajería | `8320` | **WebSocket:** `/ws`, `/ws/**`, `/ws-chat`, `/ws-chat/**` (`ws://localhost:8320`) | No (Protocolo WebSocket persistente) | `gj-chat-service-qa-santi-gxhjccffcxdgbfcj` | `gj-chat-service-prod-santi` |
+| `ms-pagos-suscripciones` | P4: Pagos | `8400` | `/api/v1/pagos/**`, `/api/v1/payments/**`, `/api/v1/subscriptions/**`, `/api/v1/plans/**`, `/api/v1/webhooks/**`, `/api/v1/admin/payments/**` | `paymentsCircuitBreaker` | `styleradar-pagos-qa` | `styleradar-pagos-prod` |
+| `ms-estadisticas` | P4: Pagos | `8420` | `/api/v1/estadisticas/**`, `/api/v1/statistics/**`, `/api/v1/analytics/**` | `statisticsCircuitBreaker` | `styleradar-estadisticas-qa` | `styleradar-estadisticas-prod` |
+| `ms-probador-virtual` | P5: Experiencia | `8500` | `/api/v1/try-on/**`, `/api/v1/probador/**` | `tryonCircuitBreaker` (`/fallback/probador`) | `styleradar-virtualtryon-qa` | `styleradar-virtualtryon-prod` |
+| `ms-segunda-vida-donaciones` | P5: Experiencia | `8520` | `/api/v1/health`, `/api/v1/donations/**`, `/api/v1/second-hand/**` | `donacionesCircuitBreaker` (`/fallback/general`) | `styleradar-donaciones-qa-jmunar` | `styleradar-donaciones-prod-jmunar` |
 | `api-gateway` | Perímetro | `8080` | `/actuator/**`, `/v3/api-docs`, `/swagger-ui.html` | N/A | `styleradar-gateway-qa` | `styleradar-gateway-prod` |
 
 ### Enrutamiento y Agregación OpenAPI / Swagger (`/v3/api-docs/*`)
@@ -52,6 +54,12 @@ El Gateway expone un catálogo Swagger agregado en `http://localhost:8080/swagge
 | **ms-notificaciones (:8300)** | `/v3/api-docs/notificaciones` | $\to$ `/v3/api-docs` | `ms-notificaciones` | `8300` |
 | **ms-usuarios (:8120)** | `/v3/api-docs/usuarios` | $\to$ `/v3/api-docs` | `ms-usuarios` | `8120` |
 | **ms-chat (:8320)** | `/v3/api-docs/chat` | $\to$ `/v3/api-docs` | `ms-chat` | `8320` |
+| **ms-inventario (:8200)** | `/v3/api-docs/inventario`, `/v3/api-docs/inventory` | $\to$ `/api/v1/v3/api-docs` *(RST PR #42)* | `ms-inventario` | `8200` |
+| **ms-item-catalogo (:8220)** | `/v3/api-docs/catalogo`, `/v3/api-docs/catalog` | $\to$ `/api/v1/v3/api-docs` | `ms-item-catalogo` | `8220` |
+| **ms-geolocalizacion (:8240)** | `/v3/api-docs/geolocalizacion`, `/v3/api-docs/geolocation` | $\to$ `/api/v1/v3/api-docs` | `ms-geolocalizacion` | `8240` |
+| **ms-playlist (:8260)** | `/v3/api-docs/playlist`, `/v3/api-docs/playlists` | $\to$ `/api/v1/v3/api-docs` | `ms-playlist` | `8260` |
+| **ms-pagos-suscripciones (:8400)** | `/v3/api-docs/pagos`, `/v3/api-docs/payments` | $\to$ `/v3/api-docs` | `ms-pagos-suscripciones` | `8400` |
+| **ms-estadisticas (:8420)** | `/v3/api-docs/estadisticas`, `/v3/api-docs/statistics` | $\to$ `/api/v1/v3/api-docs` | `ms-estadisticas` | `8420` |
 
 ### Tabla Oficial de Despliegue y Bases de Datos por Ambiente (Rúbrica Sprint 2)
 

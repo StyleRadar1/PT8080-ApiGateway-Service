@@ -586,7 +586,7 @@ class GatewayAlmacenesRoutingAndRolesIntegrationTest {
                     .expectStatus().isOk()
                     .expectBody()
                     .jsonPath("$.service").isEqualTo("ms-inventario")
-                    .jsonPath("$.path").isEqualTo("/v3/api-docs");
+                    .jsonPath("$.path").isEqualTo("/api/v1/v3/api-docs");
         }
         for (String docsUri : List.of("/v3/api-docs/catalogo", "/v3/api-docs/catalog")) {
             webTestClient.get().uri(docsUri).exchange()

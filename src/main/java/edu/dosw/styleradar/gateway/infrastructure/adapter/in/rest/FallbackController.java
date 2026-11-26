@@ -1,6 +1,7 @@
 package edu.dosw.styleradar.gateway.infrastructure.adapter.in.rest;
 
 import edu.dosw.styleradar.gateway.infrastructure.filter.GlobalRequestLoggingFilter;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +18,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/fallback")
 public class FallbackController {
+
+    public static final String RETRY_AFTER_SECONDS = "30";
 
     @GetMapping("/probador")
     public Mono<ResponseEntity<Map<String, Object>>> fallbackProbador(ServerWebExchange exchange) {
@@ -53,7 +56,9 @@ public class FallbackController {
         body.put("timestamp", Instant.now().toString());
         body.put("service", "ms-probador-virtual");
         body.put("correlationId", correlationId);
-        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body));
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+                .body(body));
     }
 
     private Mono<ResponseEntity<Map<String, Object>>> buildGeneralFallback(ServerWebExchange exchange) {
@@ -64,7 +69,9 @@ public class FallbackController {
         body.put("message", "El microservicio destino no responde temporalmente. El API Gateway ha activado el circuito de contingencia.");
         body.put("timestamp", Instant.now().toString());
         body.put("correlationId", correlationId);
-        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(body));
+        return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+                .body(body));
     }
 }
 

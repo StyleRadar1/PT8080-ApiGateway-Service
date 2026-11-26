@@ -17,7 +17,7 @@ class SecurityHeadersWebFilterTest {
     private final SecurityHeadersWebFilter filter = new SecurityHeadersWebFilter();
 
     @Test
-    @DisplayName("Emite cabeceras de seguridad HTTP estándar en respuestas del Gateway")
+    @DisplayName("BUG-011: Emite cabeceras de seguridad HTTP estándar y CSP estricto en rutas de negocio")
     void filter_emiteCabecerasDeSeguridadEnRutasGenerales() {
         MockServerWebExchange exchange = MockServerWebExchange.from(
                 MockServerHttpRequest.get("/api/v1/stores").build()
@@ -32,7 +32,27 @@ class SecurityHeadersWebFilterTest {
         assertEquals("DENY", headers.getFirst(SecurityHeadersWebFilter.X_FRAME_OPTIONS));
         assertEquals("strict-origin-when-cross-origin", headers.getFirst(SecurityHeadersWebFilter.REFERRER_POLICY));
         assertEquals("camera=(), microphone=(), geolocation=(self)", headers.getFirst(SecurityHeadersWebFilter.PERMISSIONS_POLICY));
+        assertEquals(SecurityHeadersWebFilter.API_CSP_VALUE, headers.getFirst(SecurityHeadersWebFilter.CONTENT_SECURITY_POLICY));
         assertNull(headers.getFirst(HttpHeaders.CACHE_CONTROL));
+    }
+
+    @Test
+    @DisplayName("BUG-011: Emite CSP compatible con Swagger UI y X-Frame-Options SAMEORIGIN en rutas de documentación")
+    void filter_emiteCspCompatibileConSwaggerUI() {
+        for (String swaggerPath : new String[]{"/swagger-ui.html", "/swagger-ui/index.html", "/v3/api-docs", "/v3/api-docs/inventario"}) {
+            MockServerWebExchange exchange = MockServerWebExchange.from(
+                    MockServerHttpRequest.get(swaggerPath).build()
+            );
+
+            Mono<Void> result = filter.filter(exchange, ex -> ex.getResponse().setComplete());
+            StepVerifier.create(result).verifyComplete();
+
+            HttpHeaders headers = exchange.getResponse().getHeaders();
+            assertEquals("SAMEORIGIN", headers.getFirst(SecurityHeadersWebFilter.X_FRAME_OPTIONS),
+                    "Swagger debe permitir renderizado en iframe propio (SAMEORIGIN): " + swaggerPath);
+            assertEquals(SecurityHeadersWebFilter.SWAGGER_CSP_VALUE, headers.getFirst(SecurityHeadersWebFilter.CONTENT_SECURITY_POLICY),
+                    "Swagger debe permitir scripts y estilos requeridos por OpenAPI: " + swaggerPath);
+        }
     }
 
     @Test
@@ -50,21 +70,26 @@ class SecurityHeadersWebFilterTest {
             assertEquals("no-store", headers.getFirst(HttpHeaders.CACHE_CONTROL),
                     "Debe emitir Cache-Control: no-store en " + authPath);
             assertEquals("nosniff", headers.getFirst(SecurityHeadersWebFilter.X_CONTENT_TYPE_OPTIONS));
+            assertEquals(SecurityHeadersWebFilter.API_CSP_VALUE, headers.getFirst(SecurityHeadersWebFilter.CONTENT_SECURITY_POLICY));
         }
     }
 
     @Test
-    @DisplayName("No sobreescribe cabeceras de seguridad ya presentes y maneja headers null")
-    void applySecurityHeaders_respetaCabecerasExistentesYNullSafe() {
+    @DisplayName("BUG-011: Cabeceras downstream no pueden debilitar las políticas perimetrales del Gateway")
+    void applySecurityHeaders_previeneDebilitamientoPorDownstreamYEsNullSafe() {
         SecurityHeadersWebFilter.applySecurityHeaders(null, "/api/v1/auth/login");
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.set(SecurityHeadersWebFilter.X_FRAME_OPTIONS, "SAMEORIGIN");
-        SecurityHeadersWebFilter.applySecurityHeaders(headers, null);
+        HttpHeaders downstreamHeaders = new HttpHeaders();
+        // Simular intento de downstream de debilitar perimetro
+        downstreamHeaders.set(SecurityHeadersWebFilter.X_FRAME_OPTIONS, "ALLOWALL");
+        downstreamHeaders.set(SecurityHeadersWebFilter.CONTENT_SECURITY_POLICY, "default-src * 'unsafe-inline' 'unsafe-eval'");
+        downstreamHeaders.set(SecurityHeadersWebFilter.STRICT_TRANSPORT_SECURITY, "max-age=0");
 
-        assertEquals("SAMEORIGIN", headers.getFirst(SecurityHeadersWebFilter.X_FRAME_OPTIONS));
-        assertEquals("nosniff", headers.getFirst(SecurityHeadersWebFilter.X_CONTENT_TYPE_OPTIONS));
-        assertNull(headers.getFirst(HttpHeaders.CACHE_CONTROL));
+        SecurityHeadersWebFilter.applySecurityHeaders(downstreamHeaders, "/api/v1/stores");
+
+        assertEquals("DENY", downstreamHeaders.getFirst(SecurityHeadersWebFilter.X_FRAME_OPTIONS));
+        assertEquals("max-age=31536000; includeSubDomains", downstreamHeaders.getFirst(SecurityHeadersWebFilter.STRICT_TRANSPORT_SECURITY));
+        assertEquals(SecurityHeadersWebFilter.API_CSP_VALUE, downstreamHeaders.getFirst(SecurityHeadersWebFilter.CONTENT_SECURITY_POLICY));
     }
 
     @Test

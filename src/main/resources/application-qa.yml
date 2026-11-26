@@ -37,6 +37,8 @@ spring:
               - "WWW-Authenticate"
               - "Location"
               - "Content-Disposition"
+              - "X-Correlation-Id"
+              - "X-Request-Id"
             allowCredentials: true
             maxAge: 3600
       routes:
@@ -109,7 +111,7 @@ spring:
           predicates:
             - Path=/v3/api-docs/inventario, /v3/api-docs/inventory
           filters:
-            - SetPath=/v3/api-docs
+            - SetPath=/api/v1/v3/api-docs
 
         - id: ms-catalogo-swagger
           uri: ${CATALOGO_SERVICE_URL:https://rst-itemcatalog-service-qa.redwave-74d6e30f.northcentralus.azurecontainerapps.io}
@@ -140,7 +142,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: authCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # Rutas especificas de almacenes con prioridad sobre la ruta general de Tiendas
@@ -153,7 +155,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: geolocationCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-item-catalogo-almacenes
@@ -165,7 +167,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
         - id: ms-chat-conversations
           order: -2
@@ -175,7 +177,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-tiendas
@@ -186,7 +188,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: storesCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-usuarios
@@ -196,7 +198,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: usersCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # Paquete 2: Catálogo (RESTrepo · Azure Container Apps)
@@ -207,7 +209,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: inventoryCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-item-catalogo
@@ -217,7 +219,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # ms-playlist
@@ -228,10 +230,17 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: playlistCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # Paquete 3: Mensajería
+        # ms-notificaciones-stream: Server-Sent Events (SSE) en tiempo real sin TimeLimiter/CircuitBreaker restrictivo
+        - id: ms-notificaciones-stream
+          order: -2
+          uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-qa.azurewebsites.net}
+          predicates:
+            - Path=/api/v1/users/*/notifications/stream, /api/v1/users/*/alerts/stream
+
         - id: ms-notificaciones
           order: -1
           uri: ${NOTIFICACIONES_SERVICE_URL:https://styleradar-notificaciones-qa.azurewebsites.net}
@@ -240,7 +249,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: notificationsCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-chat
@@ -250,7 +259,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-chat-ws
@@ -267,7 +276,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: paymentsCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-estadisticas
@@ -277,7 +286,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: statisticsCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # Paquete 5: Experiencia y Donaciones

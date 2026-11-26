@@ -47,6 +47,8 @@ spring:
               - "WWW-Authenticate"
               - "Location"
               - "Content-Disposition"
+              - "X-Correlation-Id"
+              - "X-Request-Id"
             allowCredentials: true
             maxAge: 3600
       routes:
@@ -125,13 +127,13 @@ spring:
           filters:
             - SetPath=/api/v1/v3/api-docs
 
-        # Swagger Inventario (transforma /v3/api-docs/inventario o /inventory -> /v3/api-docs en :8200)
+        # Swagger Inventario (transforma /v3/api-docs/inventario o /inventory -> /api/v1/v3/api-docs en :8200)
         - id: ms-inventario-swagger
           uri: ${INVENTARIO_SERVICE_URL:http://localhost:8200}
           predicates:
             - Path=/v3/api-docs/inventario, /v3/api-docs/inventory
           filters:
-            - SetPath=/v3/api-docs
+            - SetPath=/api/v1/v3/api-docs
 
         # Swagger Catálogo (transforma /v3/api-docs/catalogo o /catalog -> /api/v1/v3/api-docs en :8220)
         - id: ms-catalogo-swagger
@@ -170,7 +172,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: authCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # Rutas especificas de almacenes con prioridad sobre la ruta general de Tiendas
@@ -183,7 +185,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: geolocationCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         - id: ms-item-catalogo-almacenes
@@ -195,7 +197,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
         # ms-chat-conversations: rutas de conversaciones bajo users/stores/donations/publications (prioridad -2)
         - id: ms-chat-conversations
@@ -206,7 +208,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # ms-tiendas: Registro y Gestión de Almacenes Aliados y Fundaciones (Puerto 8140)
@@ -218,7 +220,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: storesCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # ms-usuarios: Gestión de Usuarios y Perfiles (Puerto 8120)
@@ -229,7 +231,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: usersCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # --- PAQUETE 2: CATÁLOGO (RESTrepo · Bloque 8200) ---
@@ -241,7 +243,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: inventoryCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # ms-item-catalogo: Catálogo de Prendas y Búsqueda (Puerto 8220)
@@ -252,7 +254,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: catalogoCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # ms-playlist: Listas de Prendas y Outfits (Puerto 8260)
@@ -263,10 +265,17 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: playlistCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # --- PAQUETE 3: MENSAJERÍA Y CHAT (Guatoque · Bloque 8300) ---
+        # ms-notificaciones-stream: Server-Sent Events (SSE) en tiempo real sin TimeLimiter/CircuitBreaker restrictivo
+        - id: ms-notificaciones-stream
+          order: -2
+          uri: ${NOTIFICACIONES_SERVICE_URL:http://localhost:8300}
+          predicates:
+            - Path=/api/v1/users/*/notifications/stream, /api/v1/users/*/alerts/stream
+
         # ms-notificaciones: Alertas y Notificaciones Push/Email (Puerto 8300)
         - id: ms-notificaciones
           order: -1
@@ -276,7 +285,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: notificationsCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # ms-chat: Operaciones REST de Chat en Vivo y Mensajería (Puerto 8320)
@@ -287,7 +296,7 @@ spring:
           filters:
             - name: CircuitBreaker
               args:
-                name: generalCircuitBreaker
+                name: chatCircuitBreaker
                 fallbackUri: forward:/fallback/general
 
         # ms-chat-ws: Enrutamiento WebSocket en Tiempo Real con esquema ws:// (Puerto 8320)
@@ -298,6 +307,27 @@ spring:
 
         # --- PAQUETE 4: PAGOS Y ESTADÍSTICAS (NQS · Bloque 8400) ---
         # ms-pagos-suscripciones: Pasarela de Pagos y Suscripciones (Puerto 8400)
+        - id: ms-pagos-suscripciones
+          order: -1
+          uri: ${PAGOS_SERVICE_URL:http://localhost:8400}
+          predicates:
+            - Path=/api/v1/plans, /api/v1/plans/**, /api/v1/payments/**, /api/v1/subscriptions/**, /api/v1/admin/payments, /api/v1/admin/payments/**, /api/v1/webhooks/mercadopago
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: paymentsCircuitBreaker
+                fallbackUri: forward:/fallback/general
+
+        # ms-estadisticas: Métricas de Tráfico y Rendimiento (Puerto 8420)
+        - id: ms-estadisticas
+          uri: ${ESTADISTICAS_SERVICE_URL:http://localhost:8420}
+          predicates:
+            - Path=/api/v1/statistics, /api/v1/statistics/**
+          filters:
+            - name: CircuitBreaker
+              args:
+                name: statisticsCircuitBreaker
+                fallbackUri: forward:/fallback/general
         - id: ms-pagos-suscripciones
           order: -1
           uri: ${PAGOS_SERVICE_URL:http://localhost:8400}

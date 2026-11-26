@@ -1043,4 +1043,39 @@ class JwtTokenValidatorFilterTest {
         assertNull(JwtTokenValidatorFilter.extractFoundationId(
                 Jwts.claims().add("foundationId", "invalid/chars!").build()));
     }
+
+    @Test
+    @DisplayName("BUG-005: Sin claims storeId/foundationId no se inyectan cabeceras ni se hace fallback inseguro a sub")
+    void filter_sinClaimsStoreYFoundation_noInyectaHeadersYNoHaceFallbackAlSubject() {
+        String token = Jwts.builder()
+                .subject("usuario-administrador-99")
+                .claim("role", "ROLE_STORE_ADMIN")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 3600000))
+                .signWith(secretKey)
+                .compact();
+
+        MockServerHttpRequest request = MockServerHttpRequest.get("/api/v1/statistics")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .header(JwtTokenValidatorFilter.STORE_ID_HEADER, "spoofed-store")
+                .header(JwtTokenValidatorFilter.FOUNDATION_ID_HEADER, "spoofed-foundation")
+                .build();
+        MockServerWebExchange exchange = MockServerWebExchange.from(request);
+
+        AtomicBoolean passed = new AtomicBoolean(false);
+        StepVerifier.create(filter.filter(exchange, ex -> {
+            passed.set(true);
+            // Confirma que el Gateway sanitiza los valores spoofed y NO hace fallback inseguro a sub ("usuario-administrador-99")
+            assertNull(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.STORE_ID_HEADER),
+                    "No debe existir X-Store-Id cuando no viene claim firmado en el JWT");
+            assertNull(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.ALMACEN_ID_HEADER),
+                    "No debe existir X-Almacen-Id cuando no viene claim firmado en el JWT");
+            assertNull(ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.FOUNDATION_ID_HEADER),
+                    "No debe existir X-Foundation-Id cuando no viene claim firmado en el JWT");
+            assertEquals("usuario-administrador-99", ex.getRequest().getHeaders().getFirst(JwtTokenValidatorFilter.USER_ID_HEADER));
+            return Mono.empty();
+        })).verifyComplete();
+
+        assertTrue(passed.get());
+    }
 }
